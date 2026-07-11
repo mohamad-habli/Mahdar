@@ -1,0 +1,755 @@
+// ============================================================
+//  Majles / مجلس — Prisma Schema
+//  «من المحضر إلى الإنجاز»
+//
+//  ملاحظة: المصدر يستخدم postgresql (للإنتاج).
+//  سكربت prepare-local-prisma.mjs يحوّله إلى sqlite محليًا.
+//  لذلك نتجنّب enum و Json — نستخدم String مع قيم موثّقة بالتعليقات،
+//  حتى يبقى متوافقًا مع SQLite (مثل منارة/محراب).
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+//  المؤسسة / الجهة (جذر تعدّد المستأجرين)
+// ============================================================
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  logoUrl   String?
+  settings  String   @default("{}") // JSON كنص — إعدادات عامة (العملة الافتراضية…)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users    User[]
+  councils Council[]
+
+  @@map("organizations")
+}
+
+// ============================================================
+//  المستخدمون
+//  role: SUPER_USER | SECRETARY | CHAIR | DEPT_MANAGER | MEMBER
+// ============================================================
+model User {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  username       String   @unique // اسم الدخول
+  passwordHash   String
+  role           String   @default("MEMBER")
+  jobTitle       String? // المسمى الوظيفي / الصفة
+  phone          String?
+  email          String?
+  avatarUrl      String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  memberships        CouncilMember[]
+  managedDepartments Department[]    @relation("DepartmentManager")
+  createdMeetings    Meeting[]       @relation("MeetingCreator")
+  attendances        Attendance[]
+  createdMinutes     Minutes[]       @relation("MinutesCreator")
+  approvedMinutes    Minutes[]       @relation("MinutesApprover")
+  addenda            MinuteAddendum[]
+  minutesVersions    MinutesVersion[]
+  assignedTasks      Task[]          @relation("TaskAssignee")
+  taskAssignments    TaskAssignee[]
+  createdTasks       Task[]          @relation("TaskCreator")
+  taskNotes          TaskNote[]
+  followUps          FollowUpEntry[]
+  ownedDeliverables  Deliverable[]   @relation("DeliverableOwner")
+  responsibleCosts   Cost[]          @relation("CostResponsible")
+  attachments        Attachment[]
+  documentLinks      DocumentLink[]
+  reminders          Reminder[]
+  reminderPreference ReminderPreference?
+  notifications      Notification[]
+  auditLogs          AuditLog[]
+
+  @@index([organizationId])
+  @@map("users")
+}
+
+// ============================================================
+//  المجلس / اللجنة — شجري (parentId)
+//  type: COUNCIL | COMMITTEE
+//  recurrence: NONE | WEEKLY | MONTHLY  (للاجتماعات المتكررة)
+// ============================================================
+model Council {
+  id             String   @id @default(cuid())
+  organizationId String
+  parentId       String?
+  name           String
+  description    String?
+  type           String   @default("COUNCIL")
+  isActive       Boolean  @default(true)
+
+  // الاجتماع المتكرر
+  recurrence       String  @default("NONE")
+  recurrenceDay    Int? // يوم الأسبوع (0-6) أو يوم الشهر (1-31)
+  defaultStartTime String? // "16:00"
+  defaultEndTime   String? // "18:00"
+  defaultLocation  String?
+  reminderOffsets  String  @default("[\"DAY_BEFORE\"]") // JSON كنص: قائمة بأوقات التذكير
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent       Council?     @relation("CouncilTree", fields: [parentId], references: [id])
+  children     Council[]    @relation("CouncilTree")
+
+  members     CouncilMember[]
+  departments Department[]
+  meetings    Meeting[]
+  tasks       Task[]
+  deliverables Deliverable[]
+  documentLinks DocumentLink[]
+
+  @@index([organizationId])
+  @@index([parentId])
+  @@map("councils")
+}
+
+// ============================================================
+//  عضوية المجلس
+//  membershipType: PERMANENT | GUEST
+// ============================================================
+model CouncilMember {
+  id             String   @id @default(cuid())
+  councilId      String
+  userId         String
+  membershipType String   @default("PERMANENT")
+  roleInCouncil  String? // رئيس | أمين سر | عضو …
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  council Council @relation(fields: [councilId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([councilId, userId])
+  @@index([userId])
+  @@map("council_members")
+}
+
+// ============================================================
+//  القسم / اللجنة الفرعية — شجري، له مسؤول
+// ============================================================
+model Department {
+  id          String   @id @default(cuid())
+  councilId   String
+  parentId    String?
+  name        String
+  description String?
+  managerId   String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  council  Council      @relation(fields: [councilId], references: [id], onDelete: Cascade)
+  parent   Department?  @relation("DepartmentTree", fields: [parentId], references: [id])
+  children Department[] @relation("DepartmentTree")
+  manager  User?        @relation("DepartmentManager", fields: [managerId], references: [id])
+
+  projects    Project[]
+  tasks       Task[]
+  deliverables Deliverable[]
+  costs       Cost[]
+  minuteItems MinuteItem[]
+
+  @@index([councilId])
+  @@index([managerId])
+  @@map("departments")
+}
+
+// ============================================================
+//  المشروع / الملف — داخل القسم (عقدة في الشجرة)
+//  status: ACTIVE | ON_HOLD | DONE | CANCELLED
+// ============================================================
+model Project {
+  id           String   @id @default(cuid())
+  departmentId String
+  name         String
+  description  String?
+  status       String   @default("ACTIVE")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  department  Department   @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  tasks       Task[]
+  costs       Cost[]
+  minuteItems MinuteItem[]
+
+  @@index([departmentId])
+  @@map("projects")
+}
+
+// ============================================================
+//  الاجتماع / الجلسة
+//  status: SCHEDULED | HELD | CANCELLED
+// ============================================================
+model Meeting {
+  id          String   @id @default(cuid())
+  councilId   String
+  title       String
+  description String?
+  meetingDate DateTime
+  startTime   String? // "16:00"
+  endTime     String? // "18:00"
+  location    String?
+  onlineUrl   String?
+  status      String   @default("SCHEDULED")
+
+  isRecurringInstance Boolean @default(false)
+  createdById         String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  council     Council           @relation(fields: [councilId], references: [id], onDelete: Cascade)
+  createdBy   User              @relation("MeetingCreator", fields: [createdById], references: [id])
+  agendaItems AgendaItem[]
+  attendances Attendance[]
+  minutes     Minutes?
+  reminders   MeetingReminder[]
+  deliverables Deliverable[]
+  documentLinks DocumentLink[]
+  tasks       Task[]
+  costs       Cost[]
+
+  @@index([councilId])
+  @@index([meetingDate])
+  @@map("meetings")
+}
+
+// ============================================================
+//  بنود جدول الأعمال (قبل الاجتماع)
+// ============================================================
+model AgendaItem {
+  id        String  @id @default(cuid())
+  meetingId String
+  order     Int     @default(0)
+  title     String
+  notes     String?
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  minuteItems MinuteItem[]
+
+  @@index([meetingId])
+  @@map("agenda_items")
+}
+
+// ============================================================
+//  الحضور والغياب
+//  status: PRESENT | ABSENT | EXCUSED
+//  attendeeType: PERMANENT | ATTENDEE | GUEST
+// ============================================================
+model Attendance {
+  id           String  @id @default(cuid())
+  meetingId    String
+  userId       String?
+  guestName    String? // للضيوف خارج النظام
+  status       String  @default("PRESENT")
+  attendeeType String  @default("PERMANENT")
+  notes        String?
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id])
+
+  @@index([meetingId])
+  @@index([userId])
+  @@map("attendances")
+}
+
+// ============================================================
+//  المحضر — 1:1 مع الاجتماع
+//  status: DRAFT | IN_REVIEW | APPROVED | LOCKED
+// ============================================================
+model Minutes {
+  id            String    @id @default(cuid())
+  meetingId     String    @unique
+  status        String    @default("DRAFT")
+  summary       String? // ملخص (يدوي أو AI لاحقًا)
+  rawDiscussion String? // النص الخام للنقاش — مدخل للذكاء الاصطناعي لاحقًا
+  createdById   String
+  submittedAt   DateTime?
+  approvedById  String?
+  approvedAt    DateTime?
+  lockedAt      DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  meeting    Meeting          @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  createdBy  User             @relation("MinutesCreator", fields: [createdById], references: [id])
+  approvedBy User?            @relation("MinutesApprover", fields: [approvedById], references: [id])
+  items      MinuteItem[]
+  addenda    MinuteAddendum[]
+  versions   MinutesVersion[]
+
+  @@map("minutes")
+}
+
+// نسخة آمنة من مسودة المحضر لاسترجاع النصوص والبنود دون حذف مخرجات لاحقة.
+model MinutesVersion {
+  id          String   @id @default(cuid())
+  minutesId   String
+  createdById String
+  reason      String   @default("AUTO_SAVE")
+  summary     String?
+  itemsJson   String
+  createdAt   DateTime @default(now())
+
+  minutes  Minutes @relation(fields: [minutesId], references: [id], onDelete: Cascade)
+  createdBy User    @relation(fields: [createdById], references: [id])
+
+  @@index([minutesId, createdAt])
+  @@map("minutes_versions")
+}
+
+// ============================================================
+//  بند المحضر — القلب: كل بند قد يتحوّل إلى تكليف/تكلفة…
+//  type: DISCUSSION | DECISION | TASK | FOLLOWUP | COST | NOTE | VOTE
+//  voteResult: APPROVED | REJECTED  (عند type=VOTE)
+// ============================================================
+model MinuteItem {
+  id           String  @id @default(cuid())
+  minutesId    String
+  order        Int     @default(0)
+  type         String  @default("DISCUSSION")
+  title        String?
+  content      String
+  departmentId String?
+  projectId    String?
+  sourceAgendaItemId String?
+  outcome      String  @default("OPEN")
+  settledAt    DateTime?
+  settlementNote String?
+  carriedFromItemId String?
+  carriedToItemId   String?
+
+  // للتصويت / الاعتماد
+  voteResult   String?
+  votesFor     Int?
+  votesAgainst Int?
+  votesAbstain Int?
+
+  aiGenerated Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  minutes    Minutes     @relation(fields: [minutesId], references: [id], onDelete: Cascade)
+  sourceAgendaItem AgendaItem? @relation(fields: [sourceAgendaItemId], references: [id])
+  department Department?  @relation(fields: [departmentId], references: [id])
+  project    Project?     @relation(fields: [projectId], references: [id])
+  carriedFromItem MinuteItem?  @relation("MinuteItemCarryFrom", fields: [carriedFromItemId], references: [id])
+  carriedForwardItems MinuteItem[] @relation("MinuteItemCarryFrom")
+  carriedToItem MinuteItem? @relation("MinuteItemCarryTo", fields: [carriedToItemId], references: [id])
+  carriedBackItems MinuteItem[] @relation("MinuteItemCarryTo")
+  tasks      Task[]
+  deliverables Deliverable[]
+  followUps  FollowUpEntry[]
+  documentLinks DocumentLink[]
+  costs      Cost[]
+
+  @@index([minutesId])
+  @@index([sourceAgendaItemId])
+  @@index([outcome])
+  @@index([carriedFromItemId])
+  @@map("minute_items")
+}
+
+// ============================================================
+//  ملحق رسمي للمحضر (بعد الإقفال)
+// ============================================================
+model MinuteAddendum {
+  id          String   @id @default(cuid())
+  minutesId   String
+  content     String
+  createdById String
+  createdAt   DateTime @default(now())
+
+  minutes   Minutes @relation(fields: [minutesId], references: [id], onDelete: Cascade)
+  createdBy User    @relation(fields: [createdById], references: [id])
+
+  @@index([minutesId])
+  @@map("minute_addenda")
+}
+
+// ============================================================
+//  التكليف / المهمة
+//  priority: LOW | MEDIUM | HIGH | URGENT
+//  status: NEW | IN_PROGRESS | LATE | DONE | CANCELLED
+// ============================================================
+model Task {
+  id             String    @id @default(cuid())
+  organizationId String
+  title          String
+  description    String?
+  councilId      String?
+  departmentId   String?
+  projectId      String?
+  deliverableId  String?
+  assigneeId     String?
+  sourceMeetingId    String?
+  sourceMinuteItemId String?
+  dueDate     DateTime?
+  priority    String    @default("MEDIUM")
+  status      String    @default("NEW")
+  completedAt DateTime?
+  createdById String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  council       Council?     @relation(fields: [councilId], references: [id])
+  department    Department?  @relation(fields: [departmentId], references: [id])
+  project       Project?     @relation(fields: [projectId], references: [id])
+  deliverable   Deliverable? @relation(fields: [deliverableId], references: [id])
+  assignee      User?        @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  createdBy     User         @relation("TaskCreator", fields: [createdById], references: [id])
+  sourceMeeting Meeting?     @relation(fields: [sourceMeetingId], references: [id])
+  sourceItem    MinuteItem?  @relation(fields: [sourceMinuteItemId], references: [id])
+
+  notes       TaskNote[]
+  assignees   TaskAssignee[]
+  followUps   FollowUpEntry[]
+  reminders   Reminder[]
+  costs       Cost[]
+  attachments Attachment[]
+
+  @@index([organizationId])
+  @@index([departmentId])
+  @@index([deliverableId])
+  @@index([assigneeId])
+  @@index([dueDate])
+  @@index([status])
+  @@map("tasks")
+}
+
+// ============================================================
+//  Ù…ÙƒÙ„ÙÙˆ Ø§Ù„ØªÙƒÙ„ÙŠÙ Ø¨Ø´ÙƒÙ„ Ù…ØªØ¹Ø¯Ø¯
+// ============================================================
+model TaskAssignee {
+  id        String   @id @default(cuid())
+  taskId    String
+  userId    String
+  isPrimary Boolean  @default(false)
+  assignedAt DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, userId])
+  @@index([userId])
+  @@map("task_assignees")
+}
+
+// ============================================================
+//  Ø§Ù„Ø§Ø³ØªØ­Ù‚Ø§Ù‚: Ù…Ù„Ù Ø£ÙƒØ¨Ø± ÙŠØ®Ø±Ø¬ Ù…Ù† Ø¨Ù†Ø¯ Ù…Ø­Ø¶Ø± ÙˆÙŠØ­ØªÙˆÙŠ ØªÙƒÙ„ÙŠÙØ§Øª
+//  status: NEW | IN_PROGRESS | LATE | DONE | CANCELLED
+// ============================================================
+model Deliverable {
+  id             String   @id @default(cuid())
+  organizationId String
+  title          String
+  description    String?
+  councilId      String?
+  departmentId   String?
+  sourceMeetingId String?
+  sourceMinuteItemId String?
+  ownerId        String?
+  dueDate        DateTime?
+  status         String   @default("NEW")
+  completedAt    DateTime?
+  createdById    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  council      Council?     @relation(fields: [councilId], references: [id])
+  department   Department?  @relation(fields: [departmentId], references: [id])
+  sourceMeeting Meeting?    @relation(fields: [sourceMeetingId], references: [id])
+  sourceItem   MinuteItem?  @relation(fields: [sourceMinuteItemId], references: [id])
+  owner        User?        @relation("DeliverableOwner", fields: [ownerId], references: [id])
+
+  tasks        Task[]
+  followUps    FollowUpEntry[]
+  reminders    Reminder[]
+  documentLinks DocumentLink[]
+
+  @@index([organizationId])
+  @@index([councilId])
+  @@index([departmentId])
+  @@index([dueDate])
+  @@index([status])
+  @@map("deliverables")
+}
+
+// ============================================================
+//  Ø®Ø· Ø²Ù…Ù†ÙŠ Ù„Ù„Ù…ØªØ§Ø¨Ø¹Ø§Øª Ø¹Ù„Ù‰ ØªÙƒÙ„ÙŠÙ Ø£Ùˆ Ø§Ø³ØªØ­Ù‚Ø§Ù‚
+//  type: NOTE | STATUS | ESCALATION | ATTACHMENT | REMINDER
+// ============================================================
+model FollowUpEntry {
+  id             String   @id @default(cuid())
+  organizationId String
+  taskId         String?
+  deliverableId  String?
+  minuteItemId   String?
+  authorId       String
+  type           String   @default("NOTE")
+  body           String
+  statusFrom     String?
+  statusTo       String?
+  needsEscalation Boolean @default(false)
+  attachmentUrl  String?
+  createdAt      DateTime @default(now())
+
+  task        Task?        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  deliverable Deliverable? @relation(fields: [deliverableId], references: [id], onDelete: Cascade)
+  minuteItem  MinuteItem?  @relation(fields: [minuteItemId], references: [id], onDelete: Cascade)
+  author      User         @relation(fields: [authorId], references: [id])
+
+  @@index([organizationId])
+  @@index([taskId])
+  @@index([deliverableId])
+  @@index([minuteItemId])
+  @@map("follow_up_entries")
+}
+
+// ============================================================
+//  ØªØ°ÙƒÙŠØ± Ø¹Ø§Ù… Ù„Ù„ØªÙƒÙ„ÙŠÙØ§Øª ÙˆØ§Ù„Ø§Ø³ØªØ­Ù‚Ø§Ù‚Ø§Øª
+//  targetType: TASK | DELIVERABLE
+//  offsetType: NOW | DAY_BEFORE | HOURS_BEFORE | REPEAT_UNTIL_CLOSED
+// ============================================================
+model Reminder {
+  id             String   @id @default(cuid())
+  organizationId String
+  targetType     String
+  targetId       String
+  taskId         String?
+  deliverableId  String?
+  userId         String
+  offsetType     String   @default("NOW")
+  hoursBefore    Int?
+  scheduledFor   DateTime
+  repeatUntilClosed Boolean @default(false)
+  channel        String   @default("IN_APP")
+  status         String   @default("PENDING")
+  sentAt         DateTime?
+  dedupeKey      String?  @unique
+  createdAt      DateTime @default(now())
+
+  task        Task?        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  deliverable Deliverable? @relation(fields: [deliverableId], references: [id], onDelete: Cascade)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([targetType, targetId])
+  @@index([userId])
+  @@index([scheduledFor])
+  @@map("reminders")
+}
+
+// إعدادات التذكير الشخصية للتكليفات والاستحقاقات.
+// beforeDueHours مخزنة كـ JSON نصي مثل: [24,3]
+model ReminderPreference {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  enabled            Boolean  @default(true)
+  taskEnabled        Boolean  @default(true)
+  deliverableEnabled Boolean  @default(true)
+  periodicEnabled    Boolean  @default(true)
+  intervalDays       Int      @default(1)
+  reminderTime       String   @default("09:00")
+  beforeDueEnabled   Boolean  @default(true)
+  beforeDueHours     String   @default("[24,3]")
+  includeOverdue     Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("reminder_preferences")
+}
+
+// ============================================================
+//  Ø±ÙˆØ§Ø¨Ø· Ù…Ø³ØªÙ†Ø¯Ø§Øª Ø®Ø§Ø±Ø¬ÙŠØ©
+//  entityType: MEETING | MINUTE_ITEM | DELIVERABLE | TASK
+// ============================================================
+model DocumentLink {
+  id             String   @id @default(cuid())
+  organizationId String
+  title          String
+  url            String
+  description    String?
+  entityType     String
+  entityId       String
+  meetingId      String?
+  minuteItemId   String?
+  deliverableId  String?
+  councilId      String?
+  createdById    String
+  createdAt      DateTime @default(now())
+
+  meeting     Meeting?    @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  minuteItem  MinuteItem? @relation(fields: [minuteItemId], references: [id], onDelete: Cascade)
+  deliverable Deliverable? @relation(fields: [deliverableId], references: [id], onDelete: Cascade)
+  council     Council?    @relation(fields: [councilId], references: [id], onDelete: Cascade)
+  createdBy   User        @relation(fields: [createdById], references: [id])
+
+  @@index([organizationId])
+  @@index([entityType, entityId])
+  @@index([meetingId])
+  @@index([minuteItemId])
+  @@map("document_links")
+}
+
+// ============================================================
+//  ملاحظة متابعة على التكليف
+// ============================================================
+model TaskNote {
+  id        String   @id @default(cuid())
+  taskId    String
+  authorId  String
+  body      String
+  createdAt DateTime @default(now())
+
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author User @relation(fields: [authorId], references: [id])
+
+  @@index([taskId])
+  @@map("task_notes")
+}
+
+// ============================================================
+//  التكلفة
+//  paymentStatus: UNPAID | PARTIAL | PAID
+// ============================================================
+model Cost {
+  id             String  @id @default(cuid())
+  organizationId String
+  description    String
+  expectedAmount Float?
+  actualAmount   Float?
+  currency       String  @default("USD")
+  departmentId   String?
+  projectId      String?
+  responsibleId  String?
+  taskId         String?
+  minuteItemId   String?
+  sourceMeetingId String?
+  paymentStatus  String  @default("UNPAID")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  department    Department? @relation(fields: [departmentId], references: [id])
+  project       Project?    @relation(fields: [projectId], references: [id])
+  responsible   User?       @relation("CostResponsible", fields: [responsibleId], references: [id])
+  task          Task?       @relation(fields: [taskId], references: [id])
+  minuteItem    MinuteItem? @relation(fields: [minuteItemId], references: [id])
+  sourceMeeting Meeting?    @relation(fields: [sourceMeetingId], references: [id])
+
+  attachments Attachment[]
+
+  @@index([organizationId])
+  @@index([departmentId])
+  @@map("costs")
+}
+
+// ============================================================
+//  المرفقات — متعدّدة الأشكال (entityType/entityId) + روابط مباشرة
+//  entityType: TASK | COST | MINUTE | MEETING
+// ============================================================
+model Attachment {
+  id             String   @id @default(cuid())
+  organizationId String
+  fileName       String
+  fileUrl        String
+  fileType       String?
+  fileSize       Int?
+  entityType     String
+  entityId       String
+  taskId         String?
+  costId         String?
+  uploadedById   String
+  createdAt      DateTime @default(now())
+
+  task       Task? @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  cost       Cost? @relation(fields: [costId], references: [id], onDelete: Cascade)
+  uploadedBy User  @relation(fields: [uploadedById], references: [id])
+
+  @@index([entityType, entityId])
+  @@map("attachments")
+}
+
+// ============================================================
+//  تذكير الاجتماع
+//  offsetType: DAY_BEFORE | HOURS_3 | HOUR_1
+//  channel: IN_APP | WHATSAPP | EMAIL   (الآن IN_APP فقط، والبنية جاهزة)
+//  status: PENDING | SENT | FAILED
+// ============================================================
+model MeetingReminder {
+  id           String    @id @default(cuid())
+  meetingId    String
+  offsetType   String    @default("DAY_BEFORE")
+  scheduledFor DateTime
+  channel      String    @default("IN_APP")
+  status       String    @default("PENDING")
+  sentAt       DateTime?
+  createdAt    DateTime  @default(now())
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@index([meetingId])
+  @@index([scheduledFor])
+  @@map("meeting_reminders")
+}
+
+// ============================================================
+//  الإشعارات الداخلية
+// ============================================================
+model Notification {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  type           String
+  title          String
+  body           String?
+  link           String?
+  isRead         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+  @@map("notifications")
+}
+
+// ============================================================
+//  سجل التدقيق (من عدّل ماذا ومتى)
+// ============================================================
+model AuditLog {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String?
+  action         String // CREATE | UPDATE | DELETE | APPROVE | LOCK | SEND…
+  entityType     String
+  entityId       String
+  details        String   @default("{}") // JSON كنص
+  createdAt      DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([organizationId])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}

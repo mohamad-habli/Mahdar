@@ -1,0 +1,222 @@
+@import "tailwindcss";
+
+/* ============================================================
+   محضر / Mahdar — نظام التصميم
+   الهوية: الأزرق النيلي + الذهبي
+   هادئ · إداري · واضح · RTL · فاتح/داكن
+   ============================================================ */
+
+:root {
+  /* Brand — الأزرق النيلي */
+  --brand:        #1E2A4A;
+  --brand-rgb:    30, 42, 74;
+  --brand-hover:  #28365C;
+  --brand-light:  #3B4A78;
+  --brand-soft:   #EAEDF5;
+  --brand-dark:   #141C32;
+
+  /* Gold — الذهبي */
+  --gold:         #C9A23F;
+  --gold-light:   #E0C173;
+  --gold-dark:    #9A7A26;
+  --gold-bg:      #FBF6E9;
+  --gold-border:  #E8D49A;
+
+  /* Surfaces */
+  --bg:           #F6F7FB;
+  --surface:      #FFFFFF;
+  --surface-2:    #F1F3F9;
+  --surface-3:    #E6EAF2;
+
+  /* Text */
+  --text-1:       #16203A;
+  --text-2:       #4A5573;
+  --text-3:       #8A93AC;
+
+  /* Borders */
+  --border:       #E2E6F0;
+  --border-2:     #CFD5E5;
+
+  /* States */
+  --success:      #2E7D5B;
+  --success-bg:   #E6F4EC;
+  --warning:      #B7791F;
+  --warning-bg:   #FBF1DC;
+  --danger:       #C0392B;
+  --danger-bg:    #FBEAE7;
+  --info:         #2A6FB0;
+  --info-bg:      #E6F0FA;
+
+  --radius:       14px;
+  --radius-sm:    10px;
+  --shadow-sm:    0 1px 2px rgba(20, 28, 50, 0.06);
+  --shadow:       0 4px 16px rgba(20, 28, 50, 0.08);
+  --shadow-lg:    0 12px 32px rgba(20, 28, 50, 0.12);
+}
+
+[data-theme="dark"] {
+  --brand:        #6B82C4;
+  --brand-rgb:    107, 130, 196;
+  --brand-hover:  #7E93D0;
+  --brand-light:  #93A6DC;
+  --brand-soft:   #1E2740;
+  --brand-dark:   #0D1322;
+
+  --gold:         #D9B65C;
+  --gold-light:   #E8CD84;
+  --gold-dark:    #B5942F;
+  --gold-bg:      #2A2415;
+  --gold-border:  #4A3F22;
+
+  --bg:           #0D1322;
+  --surface:      #161E33;
+  --surface-2:    #1C2740;
+  --surface-3:    #24314F;
+
+  --text-1:       #EAEEF7;
+  --text-2:       #AAB4CE;
+  --text-3:       #6F7B98;
+
+  --border:       #28324C;
+  --border-2:     #333F5E;
+
+  --success:      #4CAF85;
+  --success-bg:   #16271F;
+  --warning:      #D9A93F;
+  --warning-bg:   #2A2314;
+  --danger:       #E06A5C;
+  --danger-bg:    #2A1614;
+  --info:         #5B9BD9;
+  --info-bg:      #14202E;
+
+  --shadow-sm:    0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow:       0 4px 16px rgba(0, 0, 0, 0.35);
+  --shadow-lg:    0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+@theme inline {
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-light: var(--brand-light);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-dark: var(--brand-dark);
+  --color-gold: var(--gold);
+  --color-gold-light: var(--gold-light);
+  --color-gold-dark: var(--gold-dark);
+  --color-gold-bg: var(--gold-bg);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-text-1: var(--text-1);
+  --color-text-2: var(--text-2);
+  --color-text-3: var(--text-3);
+  --color-border: var(--border);
+  --color-border-2: var(--border-2);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+  --font-sans: var(--font-cairo), system-ui, sans-serif;
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text-1);
+  font-family: var(--font-cairo), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  min-height: 100dvh;
+}
+
+/* ====== مكوّنات مساعدة ====== */
+@layer components {
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    font-size: 0.95rem;
+    padding: 0.6rem 1.1rem;
+    transition: all 0.15s ease;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+  .btn-primary {
+    background: var(--brand);
+    color: #fff;
+  }
+  .btn-primary:hover:not(:disabled) { background: var(--brand-hover); }
+
+  .btn-gold {
+    background: var(--gold);
+    color: #1a1400;
+  }
+  .btn-gold:hover:not(:disabled) { background: var(--gold-dark); color: #fff; }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-2);
+    border: 1px solid var(--border-2);
+  }
+  .btn-ghost:hover:not(:disabled) { background: var(--surface-2); color: var(--text-1); }
+
+  .input {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border-2);
+    border-radius: var(--radius-sm);
+    padding: 0.65rem 0.85rem;
+    color: var(--text-1);
+    font-size: 0.95rem;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .input:focus {
+    outline: none;
+    border-color: var(--brand);
+    box-shadow: 0 0 0 3px rgba(var(--brand-rgb), 0.15);
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    border-radius: 999px;
+    padding: 0.2rem 0.65rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+}
+
+/* ====== شريط تمرير لطيف ====== */
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--border-2);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
+
+@media print {
+  body { background: #fff; }
+  .no-print { display: none !important; }
+}
