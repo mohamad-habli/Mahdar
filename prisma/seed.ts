@@ -41,7 +41,21 @@ async function main() {
   await prisma.user.deleteMany()
   await prisma.organization.deleteMany()
 
-  const pass = await bcrypt.hash('12345678', 12)
+  // كلمة مرور مختلفة ومتوسطة القوة لكل مستخدم (وليست موحّدة)
+  const passwords: Record<string, string> = {
+    super: 'Super#4271',
+    amin: 'Amin@6839',
+    rais: 'Rais$1952',
+    edu: 'Edu!7360',
+    fin: 'Fin&2984',
+    member1: 'Mem1#5127',
+    member2: 'Mem2@8046',
+  }
+  const hashes = Object.fromEntries(
+    await Promise.all(
+      Object.entries(passwords).map(async ([u, p]) => [u, await bcrypt.hash(p, 12)])
+    )
+  )
 
   // ====== الجهة ======
   const org = await prisma.organization.create({
@@ -53,25 +67,25 @@ async function main() {
 
   // ====== المستخدمون ======
   const secretary = await prisma.user.create({
-    data: { organizationId: org.id, name: 'عبدالله الأمين', username: 'amin', passwordHash: pass, role: 'SECRETARY', jobTitle: 'أمين سر المجلس', phone: '0500000001' },
+    data: { organizationId: org.id, name: 'عبدالله الأمين', username: 'amin', passwordHash: hashes.amin, role: 'SECRETARY', jobTitle: 'أمين سر المجلس', phone: '0500000001' },
   })
   await prisma.user.create({
-    data: { organizationId: org.id, name: 'مدير النظام', username: 'super', passwordHash: pass, role: 'SUPER_USER', jobTitle: 'مدير النظام' },
+    data: { organizationId: org.id, name: 'مدير النظام', username: 'super', passwordHash: hashes.super, role: 'SUPER_USER', jobTitle: 'مدير النظام' },
   })
   const chair = await prisma.user.create({
-    data: { organizationId: org.id, name: 'د. محمد الرئيس', username: 'rais', passwordHash: pass, role: 'CHAIR', jobTitle: 'رئيس المجلس', phone: '0500000002' },
+    data: { organizationId: org.id, name: 'د. محمد الرئيس', username: 'rais', passwordHash: hashes.rais, role: 'CHAIR', jobTitle: 'رئيس المجلس', phone: '0500000002' },
   })
   const eduManager = await prisma.user.create({
-    data: { organizationId: org.id, name: 'سعد التعليمي', username: 'edu', passwordHash: pass, role: 'DEPT_MANAGER', jobTitle: 'مسؤول لجنة التعليم', phone: '0500000003' },
+    data: { organizationId: org.id, name: 'سعد التعليمي', username: 'edu', passwordHash: hashes.edu, role: 'DEPT_MANAGER', jobTitle: 'مسؤول لجنة التعليم', phone: '0500000003' },
   })
   const finManager = await prisma.user.create({
-    data: { organizationId: org.id, name: 'خالد المالي', username: 'fin', passwordHash: pass, role: 'DEPT_MANAGER', jobTitle: 'مسؤول اللجنة المالية', phone: '0500000004' },
+    data: { organizationId: org.id, name: 'خالد المالي', username: 'fin', passwordHash: hashes.fin, role: 'DEPT_MANAGER', jobTitle: 'مسؤول اللجنة المالية', phone: '0500000004' },
   })
   const member1 = await prisma.user.create({
-    data: { organizationId: org.id, name: 'ناصر العضو', username: 'member1', passwordHash: pass, role: 'MEMBER', jobTitle: 'عضو دائم', phone: '0500000005' },
+    data: { organizationId: org.id, name: 'ناصر العضو', username: 'member1', passwordHash: hashes.member1, role: 'MEMBER', jobTitle: 'عضو دائم', phone: '0500000005' },
   })
   const member2 = await prisma.user.create({
-    data: { organizationId: org.id, name: 'فهد العضو', username: 'member2', passwordHash: pass, role: 'MEMBER', jobTitle: 'عضو دائم', phone: '0500000006' },
+    data: { organizationId: org.id, name: 'فهد العضو', username: 'member2', passwordHash: hashes.member2, role: 'MEMBER', jobTitle: 'عضو دائم', phone: '0500000006' },
   })
 
   // ====== المجلس (أسبوعي) ======
@@ -303,14 +317,10 @@ async function main() {
   })
 
   console.log('✅ اكتملت الزراعة بنجاح.')
-  console.log('   المستخدمون (كلمة المرور للجميع: 12345678):')
-  console.log('   - super    → مدير النظام')
-  console.log('   - amin     → أمين السر')
-  console.log('   - rais     → رئيس المجلس')
-  console.log('   - edu      → مسؤول لجنة التعليم')
-  console.log('   - fin      → مسؤول اللجنة المالية')
-  console.log('   - member1  → عضو')
-  console.log('   - member2  → عضو')
+  console.log('   المستخدمون:')
+  for (const [u, p] of Object.entries(passwords)) {
+    console.log(`   - ${u}\t→ ${p}`)
+  }
 }
 
 main()
