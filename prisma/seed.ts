@@ -35,6 +35,7 @@ async function main() {
   await prisma.agendaItem.deleteMany()
   await prisma.meeting.deleteMany()
   await prisma.project.deleteMany()
+  await prisma.departmentMember.deleteMany()
   await prisma.department.deleteMany()
   await prisma.councilMember.deleteMany()
   await prisma.council.deleteMany()
@@ -93,6 +94,7 @@ async function main() {
     data: {
       organizationId: org.id,
       name: 'المجلس الرئيسي',
+      chairId: chair.id,
       description: 'المجلس الأعلى لإدارة المجمع',
       type: 'COUNCIL',
       recurrence: 'WEEKLY',
@@ -119,10 +121,10 @@ async function main() {
 
   // ====== الأقسام / اللجان ======
   const eduDept = await prisma.department.create({
-    data: { councilId: council.id, name: 'لجنة التعليم', managerId: eduManager.id, description: 'الإشراف على الحلقات والمناهج' },
+    data: { councilId: council.id, name: 'لجنة التعليم', managerId: eduManager.id, description: 'الإشراف على الحلقات والمناهج', members: { create: [{ userId: eduManager.id }, { userId: member1.id }] } },
   })
   const finDept = await prisma.department.create({
-    data: { councilId: council.id, name: 'اللجنة المالية', managerId: finManager.id, description: 'الميزانية والمصروفات' },
+    data: { councilId: council.id, name: 'اللجنة المالية', managerId: finManager.id, description: 'الميزانية والمصروفات', members: { create: [{ userId: finManager.id }] } },
   })
   const mediaDept = await prisma.department.create({
     data: { councilId: council.id, name: 'لجنة الإعلام', description: 'التغطية والنشر' },
@@ -171,6 +173,7 @@ async function main() {
   const minutes = await prisma.minutes.create({
     data: {
       meetingId: pastMeeting.id,
+      title: 'محضر الجلسة الأسبوعية رقم 12',
       status: 'LOCKED',
       summary: 'نوقشت خطة تطوير المناهج واعتُمدت، مع إقرار ميزانية أولية وتكليف اللجان.',
       createdById: secretary.id,

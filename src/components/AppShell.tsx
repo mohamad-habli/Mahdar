@@ -22,6 +22,7 @@ import {
   BellRing,
   Milestone,
   Inbox,
+  Settings,
   type LucideIcon,
 } from 'lucide-react'
 import ThemeToggle from './ThemeToggle'
@@ -49,6 +50,7 @@ const ICONS: Record<string, LucideIcon> = {
   BellRing,
   Milestone,
   Inbox,
+  Settings,
 }
 
 export type IconName = keyof typeof ICONS

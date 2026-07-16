@@ -6,7 +6,7 @@ import { UserPlus, Users, Pencil, Power, Loader2, Phone } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import Modal from '@/components/ui/Modal'
 import EmptyState from '@/components/ui/EmptyState'
-import { TextField, SelectField } from '@/components/ui/Field'
+import { PasswordField, TextField, SelectField } from '@/components/ui/Field'
 import { apiSend } from '@/lib/client'
 import { ROLE_LABELS, type UserRole } from '@/types'
 
@@ -214,10 +214,9 @@ export default function UsersClient({ users, meId }: { users: Row[]; meId: strin
               disabled={!!editing}
               hint={editing ? 'لا يمكن تغييره' : 'إنجليزي وأرقام'}
             />
-            <TextField
+            <PasswordField
               label={editing ? 'كلمة مرور جديدة' : 'كلمة المرور'}
               required={!editing}
-              type="password"
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
               placeholder={editing ? 'اترك فارغًا لعدم التغيير' : '••••••'}

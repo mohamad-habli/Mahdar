@@ -24,6 +24,7 @@ export default async function CouncilDetailPage({
         where: { parentId: null },
         include: {
           manager: { select: { id: true, name: true } },
+          members: { where: { isActive: true }, include: { user: { select: { id: true, name: true } } } },
           _count: { select: { tasks: true, projects: true } },
         },
         orderBy: { createdAt: 'asc' },
@@ -51,6 +52,9 @@ export default async function CouncilDetailPage({
         defaultStartTime: council.defaultStartTime,
         defaultEndTime: council.defaultEndTime,
         defaultLocation: council.defaultLocation,
+        chairId: council.chairId,
+        chairName: council.members.find((member) => member.userId === council.chairId)?.user.name ?? null,
+        isActive: council.isActive,
       }}
       members={council.members.map((m) => ({
         id: m.id,
@@ -66,6 +70,9 @@ export default async function CouncilDetailPage({
         description: d.description,
         managerId: d.managerId,
         managerName: d.manager?.name ?? null,
+        memberIds: d.members.map((member) => member.userId),
+        memberNames: d.members.map((member) => member.user.name),
+        isActive: d.isActive,
         taskCount: d._count.tasks,
         projectCount: d._count.projects,
       }))}

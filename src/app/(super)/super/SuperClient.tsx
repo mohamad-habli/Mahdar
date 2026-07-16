@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Building2, Plus, Loader2, Users } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import Modal from '@/components/ui/Modal'
-import { TextField } from '@/components/ui/Field'
+import { PasswordField, TextField } from '@/components/ui/Field'
 import { apiSend } from '@/lib/client'
 
 interface OrganizationRow {
@@ -72,7 +72,7 @@ export default function SuperClient({ organizations }: { organizations: Organiza
           <TextField label="اسم المركز" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           <TextField label="اسم أمين السر" required value={form.secretaryName} onChange={(e) => setForm({ ...form, secretaryName: e.target.value })} />
           <TextField label="اسم المستخدم" required dir="ltr" value={form.secretaryUsername} onChange={(e) => setForm({ ...form, secretaryUsername: e.target.value })} />
-          <TextField label="كلمة المرور" required type="password" dir="ltr" value={form.secretaryPassword} onChange={(e) => setForm({ ...form, secretaryPassword: e.target.value })} />
+          <PasswordField label="كلمة المرور" required dir="ltr" value={form.secretaryPassword} onChange={(e) => setForm({ ...form, secretaryPassword: e.target.value })} />
           {error && <div className="text-sm rounded-lg px-3 py-2" style={{ background: 'var(--danger-bg)', color: 'var(--danger)' }}>{error}</div>}
         </div>
       </Modal>

@@ -110,7 +110,7 @@ export default function MinutesEditor({
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <h1 className="text-xl font-bold" style={{ color: 'var(--text-1)' }}>محضر الاجتماع</h1>
+              <MinutesTitle minutesId={minutes.id} initial={minutes.title ?? `محضر ${meeting.title}`} editable={editable} />
               <MinutesStatusBadge status={minutes.status} />
             </div>
             <p className="text-sm" style={{ color: 'var(--text-2)' }}>
@@ -216,6 +216,36 @@ export default function MinutesEditor({
 }
 
 /* ====== الملخص ====== */
+function MinutesTitle({ minutesId, initial, editable }: { minutesId: string; initial: string; editable: boolean }) {
+  const [value, setValue] = useState(initial)
+  const [saving, setSaving] = useState(false)
+  const lastSaved = useRef(initial)
+
+  useEffect(() => {
+    if (!editable || value.trim().length < 2 || value === lastSaved.current) return
+    setSaving(true)
+    const timer = setTimeout(async () => {
+      const result = await apiSend(`/api/minutes/${minutesId}`, 'PATCH', { title: value })
+      if (result.success) lastSaved.current = value
+      setSaving(false)
+    }, 700)
+    return () => clearTimeout(timer)
+  }, [editable, minutesId, value])
+
+  if (!editable) return <h1 className="text-xl font-bold" style={{ color: 'var(--text-1)' }}>{value}</h1>
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        className="input font-bold text-lg py-1.5"
+        value={value}
+        onChange={(event) => setValue(event.target.value)}
+        aria-label="عنوان المحضر"
+      />
+      {saving && <Loader2 size={14} className="animate-spin shrink-0" style={{ color: 'var(--text-3)' }} />}
+    </div>
+  )
+}
+
 function SummaryBox({ minutesId, initial, editable }: { minutesId: string; initial: string | null; editable: boolean }) {
   const [value, setValue] = useState(initial ?? '')
   const [status, setStatus] = useState<'IDLE' | 'SAVING' | 'SAVED' | 'ERROR'>('IDLE')

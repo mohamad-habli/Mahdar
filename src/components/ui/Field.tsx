@@ -1,5 +1,7 @@
 'use client'
 
+import { useState } from 'react'
+import { Eye, EyeOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface BaseProps {
@@ -37,6 +39,27 @@ export function TextField({ label, required, hint, className, ...rest }: InputPr
   return (
     <Field label={label} required={required} hint={hint} className={className}>
       <input className="input" {...rest} />
+    </Field>
+  )
+}
+
+export function PasswordField({ label, required, hint, className, ...rest }: InputProps) {
+  const [visible, setVisible] = useState(false)
+  return (
+    <Field label={label} required={required} hint={hint} className={className}>
+      <div className="relative">
+        <input className="input pl-11" type={visible ? 'text' : 'password'} {...rest} />
+        <button
+          type="button"
+          onClick={() => setVisible((value) => !value)}
+          className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-lg"
+          style={{ color: 'var(--text-3)' }}
+          aria-label={visible ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+          title={visible ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+        >
+          {visible ? <EyeOff size={17} /> : <Eye size={17} />}
+        </button>
+      </div>
     </Field>
   )
 }

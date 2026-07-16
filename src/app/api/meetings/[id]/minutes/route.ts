@@ -18,7 +18,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
     const minutes = await prisma.$transaction(async (tx) => {
       const created = await tx.minutes.create({
-        data: { meetingId: id, status: 'DRAFT', createdById: me.id },
+        data: { meetingId: id, title: `محضر ${meeting.title}`, status: 'DRAFT', createdById: me.id },
         select: { id: true },
       })
 

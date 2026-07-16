@@ -2,13 +2,14 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { User, Lock, Loader2, ArrowLeft } from 'lucide-react'
+import { User, Lock, Loader2, ArrowLeft, Eye, EyeOff } from 'lucide-react'
 import Logo from '@/components/Logo'
 
 export default function LoginPage() {
   const router = useRouter()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -149,13 +150,23 @@ export default function LoginPage() {
                   style={{ color: 'var(--text-3)' }}
                 />
                 <input
-                  type="password"
-                  className="input pr-10"
+                  type={showPassword ? 'text' : 'password'}
+                  className="input pr-10 pl-11"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   autoComplete="current-password"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((value) => !value)}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center rounded-lg"
+                  style={{ color: 'var(--text-3)' }}
+                  aria-label={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+                  title={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+                >
+                  {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                </button>
               </div>
             </div>
 

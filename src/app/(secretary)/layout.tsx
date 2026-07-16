@@ -13,8 +13,9 @@ const NAV: NavItem[] = [
   { href: '/secretary/calendar', label: 'الروزنامة', icon: 'CalendarRange' },
   { href: '/secretary/tree', label: 'شجرة المتابعة', icon: 'ListTree' },
   { href: '/secretary/archive', label: 'الأرشيف', icon: 'Archive' },
-  { href: '/secretary/reports', label: 'التقارير', icon: 'FileBarChart' },
+  { href: '/secretary/reports', label: 'التقارير والتصدير', icon: 'FileBarChart' },
   { href: '/secretary/reminders', label: 'إعدادات التذكير', icon: 'BellRing' },
+  { href: '/secretary/settings', label: 'هوية المركز والتقارير', icon: 'Settings' },
 ]
 
 export default async function SecretaryLayout({

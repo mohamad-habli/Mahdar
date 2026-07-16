@@ -13,6 +13,7 @@ const schema = z.object({
   defaultStartTime: z.string().trim().optional().nullable(),
   defaultEndTime: z.string().trim().optional().nullable(),
   defaultLocation: z.string().trim().optional().nullable(),
+  chairId: z.string().optional().nullable(),
 })
 
 async function findOwned(id: string, organizationId: string) {
@@ -27,6 +28,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const { id } = await params
     await findOwned(id, me.organizationId)
     const b = schema.parse(await req.json())
+    if (b.chairId) {
+      const chair = await prisma.user.findFirst({
+        where: { id: b.chairId, organizationId: me.organizationId, isActive: true },
+      })
+      if (!chair) throw new ApiError('رئيس المجلس غير صالح', 400)
+    }
 
     await prisma.council.update({
       where: { id },
@@ -40,10 +47,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         ...(b.defaultStartTime !== undefined ? { defaultStartTime: b.defaultStartTime || null } : {}),
         ...(b.defaultEndTime !== undefined ? { defaultEndTime: b.defaultEndTime || null } : {}),
         ...(b.defaultLocation !== undefined ? { defaultLocation: b.defaultLocation || null } : {}),
+        ...(b.chairId !== undefined ? { chairId: b.chairId || null } : {}),
       },
     })
 
-    await logAudit({ organizationId: me.organizationId, userId: me.id, action: 'UPDATE', entityType: 'Council', entityId: id })
+    if (b.chairId) {
+      await prisma.councilMember.upsert({
+        where: { councilId_userId: { councilId: id, userId: b.chairId } },
+        create: { councilId: id, userId: b.chairId, roleInCouncil: 'رئيس المجلس' },
+        update: { roleInCouncil: 'رئيس المجلس', isActive: true },
+      })
+    }
+
+    await logAudit({ organizationId: me.organizationId, userId: me.id, action: 'UPDATE', entityType: 'Council', entityId: id, details: { fields: Object.keys(b) } })
     return ok({ id })
   })
 }
@@ -54,11 +70,19 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     const { id } = await params
     await findOwned(id, me.organizationId)
 
-    const meetings = await prisma.meeting.count({ where: { councilId: id } })
-    if (meetings > 0) throw new ApiError('لا يمكن حذف مجلس له اجتماعات. عطّله بدلًا من ذلك.', 400)
+    const linked = await prisma.council.findUnique({
+      where: { id },
+      select: { _count: { select: { meetings: true, tasks: true, deliverables: true, departments: true, children: true } } },
+    })
+    const hasLinkedData = !!linked && Object.values(linked._count).some((count) => count > 0)
+    if (hasLinkedData) {
+      await prisma.council.update({ where: { id }, data: { isActive: false } })
+      await logAudit({ organizationId: me.organizationId, userId: me.id, action: 'ARCHIVE', entityType: 'Council', entityId: id, details: linked?._count })
+      return ok({ id, archived: true, message: 'هذا المجلس يحتوي على اجتماعات أو محاضر، لذلك تمت أرشفته بدل حذفه نهائيًا.' })
+    }
 
     await prisma.council.delete({ where: { id } })
     await logAudit({ organizationId: me.organizationId, userId: me.id, action: 'DELETE', entityType: 'Council', entityId: id })
-    return ok({ id })
+    return ok({ id, archived: false })
   })
 }

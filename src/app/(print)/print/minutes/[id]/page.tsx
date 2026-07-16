@@ -6,6 +6,7 @@ import MinuteItemCard from '@/components/MinuteItemCard'
 import PrintButton from '@/components/PrintButton'
 import { formatDate } from '@/lib/utils'
 import { MINUTES_STATUS_LABELS, type MinutesStatus } from '@/types'
+import { parseOrganizationBranding } from '@/lib/branding'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,7 +22,7 @@ export default async function PrintMinutes({
   if (!data || !data.minutes) notFound()
 
   const [org, meeting] = await Promise.all([
-    prisma.organization.findUnique({ where: { id: me.organizationId }, select: { name: true } }),
+    prisma.organization.findUnique({ where: { id: me.organizationId }, select: { name: true, logoUrl: true, settings: true } }),
     prisma.meeting.findUnique({
       where: { id },
       include: {
@@ -31,6 +32,9 @@ export default async function PrintMinutes({
     }),
   ])
   if (!meeting) notFound()
+  const branding = parseOrganizationBranding(org?.settings)
+  const primary = branding.reportTheme === 'MONO' ? '#111111' : branding.primaryColor
+  const secondary = branding.reportTheme === 'MONO' ? '#555555' : branding.secondaryColor
 
   const nameOf = (a: { user: { name: string } | null; guestName: string | null }) => a.user?.name ?? a.guestName ?? '—'
   const present = meeting.attendances.filter((a) => a.status === 'PRESENT')
@@ -44,16 +48,17 @@ export default async function PrintMinutes({
         <PrintButton auto />
       </div>
 
-      <div style={{ textAlign: 'center', borderBottom: '2px solid #C9A23F', paddingBottom: 16, marginBottom: 20 }}>
-        <div style={{ fontSize: 13, color: '#4A5573' }}>{org?.name ?? ''}</div>
-        <h1 style={{ fontSize: 22, fontWeight: 800, margin: '6px 0' }}>محضر اجتماع</h1>
+      <div style={{ textAlign: 'center', borderBottom: `3px solid ${secondary}`, paddingBottom: 16, marginBottom: 20 }}>
+        {org?.logoUrl && <img src={org.logoUrl} alt="شعار المركز" style={{ width: 70, height: 70, objectFit: 'contain', margin: '0 auto 8px' }} />}
+        <div style={{ fontSize: 13, color: primary, fontWeight: 700 }}>{org?.name ?? ''}</div>
+        <h1 style={{ fontSize: 22, fontWeight: 800, margin: '6px 0', color: primary }}>{data.minutes.title || 'محضر اجتماع'}</h1>
         <div style={{ fontSize: 16, fontWeight: 600 }}>{meeting.title}</div>
         <div style={{ fontSize: 13, color: '#4A5573', marginTop: 4 }}>
           {data.meeting.councilName} · {formatDate(meeting.meetingDate)}
           {meeting.startTime ? ` · ${meeting.startTime}` : ''}{meeting.endTime ? ` - ${meeting.endTime}` : ''}
           {meeting.location ? ` · ${meeting.location}` : ''}
         </div>
-        <div style={{ fontSize: 12, color: '#9A7A26', marginTop: 4 }}>
+        <div style={{ fontSize: 12, color: secondary, marginTop: 4 }}>
           الحالة: {MINUTES_STATUS_LABELS[data.minutes.status as MinutesStatus]}
           {data.minutes.approvedByName ? ` · اعتمده ${data.minutes.approvedByName}` : ''}
         </div>

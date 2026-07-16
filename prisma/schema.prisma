@@ -56,6 +56,8 @@ model User {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   memberships        CouncilMember[]
+  departmentMemberships DepartmentMember[]
+  chairedCouncils    Council[]       @relation("CouncilChair")
   managedDepartments Department[]    @relation("DepartmentManager")
   createdMeetings    Meeting[]       @relation("MeetingCreator")
   attendances        Attendance[]
@@ -90,6 +92,7 @@ model Council {
   id             String   @id @default(cuid())
   organizationId String
   parentId       String?
+  chairId        String?
   name           String
   description    String?
   type           String   @default("COUNCIL")
@@ -109,6 +112,7 @@ model Council {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   parent       Council?     @relation("CouncilTree", fields: [parentId], references: [id])
   children     Council[]    @relation("CouncilTree")
+  chair        User?        @relation("CouncilChair", fields: [chairId], references: [id])
 
   members     CouncilMember[]
   departments Department[]
@@ -119,6 +123,7 @@ model Council {
 
   @@index([organizationId])
   @@index([parentId])
+  @@index([chairId])
   @@map("councils")
 }
 
@@ -161,6 +166,7 @@ model Department {
   parent   Department?  @relation("DepartmentTree", fields: [parentId], references: [id])
   children Department[] @relation("DepartmentTree")
   manager  User?        @relation("DepartmentManager", fields: [managerId], references: [id])
+  members  DepartmentMember[]
 
   projects    Project[]
   tasks       Task[]
@@ -171,6 +177,22 @@ model Department {
   @@index([councilId])
   @@index([managerId])
   @@map("departments")
+}
+
+// عضوية القسم منفصلة عن عضوية المجلس حتى تظهر التكليفات والتقارير لكل أعضاء القسم.
+model DepartmentMember {
+  id           String   @id @default(cuid())
+  departmentId String
+  userId       String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([departmentId, userId])
+  @@index([userId])
+  @@map("department_members")
 }
 
 // ============================================================
@@ -279,6 +301,7 @@ model Attendance {
 model Minutes {
   id            String    @id @default(cuid())
   meetingId     String    @unique
+  title         String?
   status        String    @default("DRAFT")
   summary       String? // ملخص (يدوي أو AI لاحقًا)
   rawDiscussion String? // النص الخام للنقاش — مدخل للذكاء الاصطناعي لاحقًا

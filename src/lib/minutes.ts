@@ -3,6 +3,7 @@ import type { MinuteItemData } from '@/components/MinuteItemCard'
 
 export interface FullMinutes {
   id: string
+  title: string | null
   status: string
   summary: string | null
   submittedAt: string | null
@@ -129,6 +130,7 @@ export async function loadMeetingMinutes(meetingId: string, organizationId: stri
     meeting: meetingCtx,
     minutes: {
       id: m.id,
+      title: m.title,
       status: m.status,
       summary: m.summary,
       submittedAt: m.submittedAt?.toISOString() ?? null,

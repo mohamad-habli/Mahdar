@@ -6,6 +6,7 @@ import Link from 'next/link'
 import {
   ArrowRight, CalendarDays, Clock, MapPin, Video, ListChecks, Plus, X,
   Users, Loader2, Check, UserPlus, FileText, Trash2, BellRing, Link2, ExternalLink,
+  Pencil,
 } from 'lucide-react'
 import { REMINDER_LABELS, type ReminderOffset } from '@/lib/notifications'
 import Modal from '@/components/ui/Modal'
@@ -13,6 +14,7 @@ import { apiSend } from '@/lib/client'
 import { formatDate } from '@/lib/utils'
 import { ROLE_LABELS, ATTENDANCE_LABELS, type UserRole, type AttendanceStatus } from '@/types'
 import MeetingWorkflowSteps, { type MeetingWorkflowState } from '@/components/meetings/MeetingWorkflowSteps'
+import { TextAreaField, TextField } from '@/components/ui/Field'
 
 interface Meeting {
   id: string; title: string; description: string | null; councilName: string
@@ -44,6 +46,27 @@ export default function MeetingDetailClient({
   meeting: Meeting; agenda: Agenda[]; roster: RosterRow[]; guests: Guest[]; hasAttendance: boolean; reminders: Reminder[]; documentLinks: DocumentLink[]; workflow: MeetingWorkflowState
 }) {
   const router = useRouter()
+  const [editOpen, setEditOpen] = useState(false)
+  const [editBusy, setEditBusy] = useState(false)
+  const [editError, setEditError] = useState('')
+  const [editForm, setEditForm] = useState({
+    title: meeting.title,
+    description: meeting.description ?? '',
+    meetingDate: meeting.meetingDate.slice(0, 10),
+    startTime: meeting.startTime ?? '',
+    endTime: meeting.endTime ?? '',
+    location: meeting.location ?? '',
+    onlineUrl: meeting.onlineUrl ?? '',
+  })
+
+  async function saveMeetingDetails() {
+    setEditBusy(true); setEditError('')
+    const res = await apiSend(`/api/meetings/${meeting.id}`, 'PATCH', editForm)
+    setEditBusy(false)
+    if (!res.success) { setEditError(res.error ?? 'تعذّر حفظ تفاصيل الاجتماع'); return }
+    setEditOpen(false)
+    router.refresh()
+  }
 
   const ALL_OFFSETS: ReminderOffset[] = ['DAY_BEFORE', 'HOURS_3', 'HOUR_1']
   async function addReminder(offset: string) {
@@ -158,9 +181,12 @@ export default function MeetingDetailClient({
               {meeting.onlineUrl && <a href={meeting.onlineUrl} target="_blank" className="flex items-center gap-1" style={{ color: 'var(--brand)' }}><Video size={14} /> رابط</a>}
             </div>
           </div>
-          <Link href={`/secretary/meetings/${meeting.id}/minutes`} className="btn btn-gold">
-            <FileText size={17} /> المحضر
-          </Link>
+          <div className="flex gap-2">
+            <button className="btn btn-ghost" onClick={() => { setEditError(''); setEditOpen(true) }}><Pencil size={16} /> تعديل</button>
+            <Link href={`/secretary/meetings/${meeting.id}/minutes`} className="btn btn-gold">
+              <FileText size={17} /> المحضر
+            </Link>
+          </div>
         </div>
 
         {/* حالة الاجتماع */}
@@ -177,6 +203,29 @@ export default function MeetingDetailClient({
           ))}
         </div>
       </div>
+
+      <Modal
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+        title="تعديل تفاصيل الاجتماع"
+        footer={<>
+          <button className="btn btn-ghost" onClick={() => setEditOpen(false)} disabled={editBusy}>إلغاء</button>
+          <button className="btn btn-primary" onClick={saveMeetingDetails} disabled={editBusy}>{editBusy && <Loader2 size={16} className="animate-spin" />} حفظ</button>
+        </>}
+      >
+        <div className="space-y-4">
+          <TextField label="عنوان الاجتماع" required value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} />
+          <TextAreaField label="الوصف" value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
+          <div className="grid grid-cols-2 gap-3">
+            <TextField label="التاريخ" type="date" dir="ltr" value={editForm.meetingDate} onChange={(e) => setEditForm({ ...editForm, meetingDate: e.target.value })} />
+            <TextField label="المكان" value={editForm.location} onChange={(e) => setEditForm({ ...editForm, location: e.target.value })} />
+            <TextField label="وقت البداية" type="time" dir="ltr" value={editForm.startTime} onChange={(e) => setEditForm({ ...editForm, startTime: e.target.value })} />
+            <TextField label="وقت النهاية" type="time" dir="ltr" value={editForm.endTime} onChange={(e) => setEditForm({ ...editForm, endTime: e.target.value })} />
+          </div>
+          <TextField label="رابط الاجتماع" type="url" dir="ltr" value={editForm.onlineUrl} onChange={(e) => setEditForm({ ...editForm, onlineUrl: e.target.value })} />
+          {editError && <div className="text-sm rounded-lg px-3 py-2" style={{ background: 'var(--danger-bg)', color: 'var(--danger)' }}>{editError}</div>}
+        </div>
+      </Modal>
 
       {/* التذكيرات */}
       <div className="card p-5 mb-5">

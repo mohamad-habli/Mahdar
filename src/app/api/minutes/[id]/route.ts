@@ -7,6 +7,7 @@ import { createMinutesVersion, getMinutesWorkflowChecks, workflowBlockingMessage
 
 const schema = z.object({
   action: z.enum(['submit', 'approve', 'return', 'lock']).optional(),
+  title: z.string().trim().min(2, 'عنوان المحضر مطلوب').optional(),
   summary: z.string().trim().optional().nullable(),
 })
 
@@ -29,12 +30,26 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     const b = schema.parse(payload)
 
-    // تحديث الملخص (أمين السر، في المسودة فقط)
-    if (b.summary !== undefined) {
+    // تحديث عنوان المحضر والملخص (أمين السر، في المسودة فقط)
+    if (b.summary !== undefined || b.title !== undefined) {
       if (me.role !== 'SECRETARY') throw new ApiError('غير مصرح', 403)
-      if (minutes.status !== 'DRAFT') throw new ApiError('لا يمكن التعديل بعد الإرسال', 400)
-      await prisma.minutes.update({ where: { id }, data: { summary: b.summary || null } })
+      if (minutes.status !== 'DRAFT') throw new ApiError('لا يمكن تعديل عنوان أو محتوى المحضر بعد إرساله للمراجعة', 403)
+      await prisma.minutes.update({
+        where: { id },
+        data: {
+          ...(b.summary !== undefined ? { summary: b.summary || null } : {}),
+          ...(b.title !== undefined ? { title: b.title } : {}),
+        },
+      })
       await createMinutesVersion(id, me.id)
+      await logAudit({
+        organizationId: me.organizationId,
+        userId: me.id,
+        action: 'UPDATE',
+        entityType: 'Minutes',
+        entityId: id,
+        details: { fields: [b.title !== undefined ? 'title' : null, b.summary !== undefined ? 'summary' : null].filter(Boolean) },
+      })
     }
 
     if (b.action) {

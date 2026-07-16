@@ -15,7 +15,10 @@ const schema = z.object({
 })
 
 async function findOwned(id: string, organizationId: string) {
-  const m = await prisma.meeting.findFirst({ where: { id, council: { organizationId } } })
+  const m = await prisma.meeting.findFirst({
+    where: { id, council: { organizationId } },
+    include: { minutes: { select: { status: true } } },
+  })
   if (!m) throw new ApiError('الاجتماع غير موجود', 404)
   return m
 }
@@ -24,8 +27,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   return handle(async () => {
     const me = await authorize(['SECRETARY'])
     const { id } = await params
-    await findOwned(id, me.organizationId)
+    const current = await findOwned(id, me.organizationId)
     const b = schema.parse(await req.json())
+    const detailFields = ['title', 'description', 'meetingDate', 'startTime', 'endTime', 'location', 'onlineUrl']
+      .filter((field) => b[field as keyof typeof b] !== undefined)
+    if (detailFields.length && ['APPROVED', 'LOCKED'].includes(current.minutes?.status ?? '')) {
+      throw new ApiError('لا يمكن تعديل تفاصيل اجتماع بعد اعتماد محضره أو إقفاله. أعد المحضر للمسودة أولًا بصلاحية مخوّلة.', 403)
+    }
 
     await prisma.meeting.update({
       where: { id },
@@ -41,7 +49,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       },
     })
 
-    await logAudit({ organizationId: me.organizationId, userId: me.id, action: 'UPDATE', entityType: 'Meeting', entityId: id, details: b.status ? { status: b.status } : {} })
+    await logAudit({
+      organizationId: me.organizationId,
+      userId: me.id,
+      action: 'UPDATE',
+      entityType: 'Meeting',
+      entityId: id,
+      details: { fields: Object.keys(b), before: { title: current.title, meetingDate: current.meetingDate } },
+    })
     return ok({ id })
   })
 }

@@ -16,6 +16,8 @@ import {
   Loader2,
   ClipboardList,
   FolderKanban,
+  Pencil,
+  Archive,
 } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import EmptyState from '@/components/ui/EmptyState'
@@ -34,6 +36,9 @@ interface Council {
   defaultStartTime: string | null
   defaultEndTime: string | null
   defaultLocation: string | null
+  chairId: string | null
+  chairName: string | null
+  isActive: boolean
 }
 interface Member {
   id: string
@@ -51,6 +56,9 @@ interface Dept {
   managerName: string | null
   taskCount: number
   projectCount: number
+  memberIds: string[]
+  memberNames: string[]
+  isActive: boolean
 }
 interface OrgUser {
   id: string
@@ -73,6 +81,36 @@ export default function CouncilDetailClient({
 }) {
   const router = useRouter()
   const [busy, setBusy] = useState(false)
+  const [councilModal, setCouncilModal] = useState(false)
+  const [councilErr, setCouncilErr] = useState('')
+  const [councilForm, setCouncilForm] = useState({
+    name: council.name,
+    type: council.type,
+    description: council.description ?? '',
+    chairId: council.chairId ?? '',
+    isActive: council.isActive,
+  })
+
+  async function saveCouncil() {
+    setBusy(true); setCouncilErr('')
+    const res = await apiSend(`/api/councils/${council.id}`, 'PATCH', {
+      ...councilForm,
+      chairId: councilForm.chairId || null,
+    })
+    setBusy(false)
+    if (!res.success) { setCouncilErr(res.error ?? 'تعذّر الحفظ'); return }
+    setCouncilModal(false)
+    router.refresh()
+  }
+
+  async function archiveCouncil() {
+    if (!confirm('حذف المجلس إن كان فارغًا، أو أرشفته مع الحفاظ على كل بياناته إن كان مستخدمًا؟')) return
+    const res = await apiSend<{ archived: boolean; message?: string }>(`/api/councils/${council.id}`, 'DELETE')
+    if (!res.success) { alert(res.error); return }
+    if (res.data?.message) alert(res.data.message)
+    router.push('/secretary/councils')
+    router.refresh()
+  }
 
   // ===== إضافة عضو =====
   const [memberModal, setMemberModal] = useState(false)
@@ -100,28 +138,54 @@ export default function CouncilDetailClient({
 
   // ===== قسم =====
   const [deptModal, setDeptModal] = useState(false)
-  const [deptForm, setDeptForm] = useState({ name: '', description: '', managerId: '' })
+  const [editingDept, setEditingDept] = useState<Dept | null>(null)
+  const [deptForm, setDeptForm] = useState({ name: '', description: '', managerId: '', memberIds: [] as string[], isActive: true })
   const [deptErr, setDeptErr] = useState('')
 
-  async function addDept() {
+  function openAddDept() {
+    setEditingDept(null)
+    setDeptForm({ name: '', description: '', managerId: '', memberIds: [], isActive: true })
+    setDeptErr('')
+    setDeptModal(true)
+  }
+
+  function openEditDept(dept: Dept) {
+    setEditingDept(dept)
+    setDeptForm({
+      name: dept.name,
+      description: dept.description ?? '',
+      managerId: dept.managerId ?? '',
+      memberIds: dept.memberIds,
+      isActive: dept.isActive,
+    })
+    setDeptErr('')
+    setDeptModal(true)
+  }
+
+  async function saveDept() {
     setBusy(true); setDeptErr('')
-    const res = await apiSend('/api/departments', 'POST', {
-      councilId: council.id,
+    const payload = {
       name: deptForm.name,
       description: deptForm.description,
       managerId: deptForm.managerId || null,
-    })
+      memberIds: deptForm.memberIds,
+      isActive: deptForm.isActive,
+    }
+    const res = editingDept
+      ? await apiSend(`/api/departments/${editingDept.id}`, 'PATCH', payload)
+      : await apiSend('/api/departments', 'POST', { councilId: council.id, ...payload })
     setBusy(false)
     if (!res.success) { setDeptErr(res.error ?? 'تعذّر الحفظ'); return }
     setDeptModal(false)
-    setDeptForm({ name: '', description: '', managerId: '' })
+    setDeptForm({ name: '', description: '', managerId: '', memberIds: [], isActive: true })
     router.refresh()
   }
 
   async function removeDept(id: string) {
-    if (!confirm('حذف هذا القسم؟')) return
-    const res = await apiSend(`/api/departments/${id}`, 'DELETE')
+    if (!confirm('حذف القسم إن كان فارغًا، أو أرشفته مع الحفاظ على بياناته إن كان مستخدمًا؟')) return
+    const res = await apiSend<{ archived: boolean; message?: string }>(`/api/departments/${id}`, 'DELETE')
     if (!res.success) alert(res.error)
+    else if (res.data?.message) alert(res.data.message)
     router.refresh()
   }
 
@@ -136,11 +200,21 @@ export default function CouncilDetailClient({
 
       {/* رأس المجلس */}
       <div className="card p-5 mb-5">
-        <div className="flex items-center gap-2 flex-wrap mb-2">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+          <div className="flex items-center gap-2 flex-wrap mb-2">
           <h1 className="text-xl lg:text-2xl font-bold" style={{ color: 'var(--text-1)' }}>{council.name}</h1>
           <span className="badge" style={{ background: 'var(--gold-bg)', color: 'var(--gold-dark)' }}>
             {council.type === 'COMMITTEE' ? 'لجنة' : 'مجلس'}
           </span>
+          {!council.isActive && <span className="badge" style={{ background: 'var(--danger-bg)', color: 'var(--danger)' }}>مؤرشف</span>}
+          </div>
+          {council.chairName && <p className="text-xs mb-2" style={{ color: 'var(--text-3)' }}>رئيس المجلس: {council.chairName}</p>}
+          </div>
+          <div className="flex gap-2">
+            <button className="btn btn-ghost px-3" onClick={() => setCouncilModal(true)} title="تعديل المجلس"><Pencil size={16} /></button>
+            <button className="btn btn-ghost px-3" onClick={archiveCouncil} title="حذف أو أرشفة" style={{ color: 'var(--danger)' }}><Archive size={16} /></button>
+          </div>
         </div>
         {council.description && <p className="text-sm mb-3" style={{ color: 'var(--text-2)' }}>{council.description}</p>}
         <div className="flex items-center gap-4 text-xs flex-wrap" style={{ color: 'var(--text-3)' }}>
@@ -208,7 +282,7 @@ export default function CouncilDetailClient({
               <h3 className="font-bold" style={{ color: 'var(--text-1)' }}>الأقسام واللجان</h3>
               <span className="badge" style={{ background: 'var(--surface-3)', color: 'var(--text-2)' }}>{departments.length}</span>
             </div>
-            <button className="btn btn-ghost px-3 py-1.5 text-sm" onClick={() => { setDeptErr(''); setDeptModal(true) }}>
+            <button className="btn btn-ghost px-3 py-1.5 text-sm" onClick={openAddDept}>
               <Plus size={15} /> إضافة
             </button>
           </div>
@@ -225,11 +299,13 @@ export default function CouncilDetailClient({
                     <div className="font-semibold text-sm truncate" style={{ color: 'var(--text-1)' }}>{d.name}</div>
                     <div className="text-xs flex items-center gap-2 flex-wrap" style={{ color: 'var(--text-3)' }}>
                       <span>{d.managerName ? `المسؤول: ${d.managerName}` : 'بلا مسؤول'}</span>
+                      <span>{d.memberNames.length} عضو</span>
                       <span className="flex items-center gap-1"><ClipboardList size={11} /> {d.taskCount}</span>
                       <span className="flex items-center gap-1"><FolderKanban size={11} /> {d.projectCount}</span>
                     </div>
                   </div>
-                  <button className="btn btn-ghost px-2 py-1.5" style={{ color: 'var(--danger)' }} onClick={() => removeDept(d.id)} title="حذف">
+                  <button className="btn btn-ghost px-2 py-1.5" onClick={() => openEditDept(d)} title="تعديل"><Pencil size={15} /></button>
+                  <button className="btn btn-ghost px-2 py-1.5" style={{ color: 'var(--danger)' }} onClick={() => removeDept(d.id)} title="حذف أو أرشفة">
                     <Trash2 size={15} />
                   </button>
                 </div>
@@ -270,15 +346,37 @@ export default function CouncilDetailClient({
         </div>
       </Modal>
 
+      <Modal
+        open={councilModal}
+        onClose={() => setCouncilModal(false)}
+        title="تعديل المجلس / اللجنة"
+        footer={<>
+          <button className="btn btn-ghost" onClick={() => setCouncilModal(false)} disabled={busy}>إلغاء</button>
+          <button className="btn btn-primary" onClick={saveCouncil} disabled={busy}>{busy && <Loader2 size={16} className="animate-spin" />} حفظ</button>
+        </>}
+      >
+        <div className="space-y-4">
+          <TextField label="الاسم" required value={councilForm.name} onChange={(e) => setCouncilForm({ ...councilForm, name: e.target.value })} />
+          <SelectField label="النوع" options={[{ value: 'COUNCIL', label: 'مجلس' }, { value: 'COMMITTEE', label: 'لجنة' }]} value={councilForm.type} onChange={(e) => setCouncilForm({ ...councilForm, type: e.target.value })} />
+          <SelectField label="الرئيس / المسؤول" placeholder="بلا رئيس محدد" options={userOptions} value={councilForm.chairId} onChange={(e) => setCouncilForm({ ...councilForm, chairId: e.target.value })} />
+          <TextAreaField label="الوصف" value={councilForm.description} onChange={(e) => setCouncilForm({ ...councilForm, description: e.target.value })} />
+          <label className="flex items-center gap-2 text-sm font-semibold" style={{ color: 'var(--text-2)' }}>
+            <input type="checkbox" checked={councilForm.isActive} onChange={(e) => setCouncilForm({ ...councilForm, isActive: e.target.checked })} />
+            مجلس نشط
+          </label>
+          {councilErr && <div className="text-sm rounded-lg px-3 py-2" style={{ background: 'var(--danger-bg)', color: 'var(--danger)' }}>{councilErr}</div>}
+        </div>
+      </Modal>
+
       {/* مودال القسم */}
       <Modal
         open={deptModal}
         onClose={() => setDeptModal(false)}
-        title="إضافة قسم / لجنة فرعية"
+        title={editingDept ? 'تعديل القسم / المجموعة' : 'إضافة قسم / لجنة فرعية'}
         footer={
           <>
             <button className="btn btn-ghost" onClick={() => setDeptModal(false)} disabled={busy}>إلغاء</button>
-            <button className="btn btn-primary" onClick={addDept} disabled={busy}>
+            <button className="btn btn-primary" onClick={saveDept} disabled={busy}>
               {busy && <Loader2 size={16} className="animate-spin" />} حفظ
             </button>
           </>
@@ -292,6 +390,34 @@ export default function CouncilDetailClient({
             hint="يمكن لمسؤول القسم متابعة تكليفاته وتحديث حالتها." />
           <TextAreaField label="وصف" value={deptForm.description}
             onChange={(e) => setDeptForm({ ...deptForm, description: e.target.value })} />
+          <div>
+            <div className="text-sm font-semibold mb-2" style={{ color: 'var(--text-2)' }}>أعضاء القسم</div>
+            <div className="flex flex-wrap gap-2">
+              {orgUsers.map((user) => {
+                const selected = deptForm.memberIds.includes(user.id)
+                return (
+                  <button
+                    key={user.id}
+                    type="button"
+                    className="badge"
+                    style={selected ? { background: 'var(--brand)', color: '#fff' } : { background: 'var(--surface-2)', color: 'var(--text-2)' }}
+                    onClick={() => setDeptForm({
+                      ...deptForm,
+                      memberIds: selected ? deptForm.memberIds.filter((id) => id !== user.id) : [...deptForm.memberIds, user.id],
+                    })}
+                  >
+                    {user.name}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          {editingDept && (
+            <label className="flex items-center gap-2 text-sm font-semibold" style={{ color: 'var(--text-2)' }}>
+              <input type="checkbox" checked={deptForm.isActive} onChange={(e) => setDeptForm({ ...deptForm, isActive: e.target.checked })} />
+              قسم نشط
+            </label>
+          )}
           {deptErr && <div className="text-sm rounded-lg px-3 py-2" style={{ background: 'var(--danger-bg)', color: 'var(--danger)' }}>{deptErr}</div>}
         </div>
       </Modal>
