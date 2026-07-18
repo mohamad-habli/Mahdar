@@ -13,18 +13,13 @@ import { ROLE_LABELS, type UserRole } from '@/types'
 interface Row {
   id: string
   name: string
+  loginName: string | null
   username: string
-  identifierCode: string
   role: string
   jobTitle: string | null
   phone: string | null
   email: string | null
   isActive: boolean
-}
-
-interface AvailableIdentifier {
-  id: string
-  code: string
 }
 
 const ROLE_OPTIONS = (Object.keys(ROLE_LABELS) as UserRole[])
@@ -38,9 +33,14 @@ const ROLE_TONE: Record<string, [string, string]> = {
   MEMBER: ['var(--surface-3)', 'var(--text-2)'],
 }
 
-const emptyForm = { name: '', identifierId: '', password: '', role: 'MEMBER', jobTitle: '', phone: '' }
+const emptyForm = { name: '', loginName: '', password: '', role: 'MEMBER', jobTitle: '', phone: '' }
 
-export default function UsersClient({ users, availableIdentifiers, meId }: { users: Row[]; availableIdentifiers: AvailableIdentifier[]; meId: string }) {
+function finalLogin(prefix: string | null, loginName: string) {
+  if (!prefix || !loginName.trim()) return ''
+  return `${prefix}-${loginName.trim().toLowerCase()}`
+}
+
+export default function UsersClient({ users, loginPrefix, meId }: { users: Row[]; loginPrefix: string | null; meId: string }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Row | null>(null)
@@ -52,39 +52,41 @@ export default function UsersClient({ users, availableIdentifiers, meId }: { use
   function openCreate() {
     setEditing(null)
     setError('')
-    setForm({ ...emptyForm, identifierId: availableIdentifiers[0]?.id ?? '' })
+    setForm(emptyForm)
     setOpen(true)
   }
 
   function openEdit(user: Row) {
     setEditing(user)
     setError('')
-    setForm({ name: user.name, identifierId: '', password: '', role: user.role, jobTitle: user.jobTitle ?? '', phone: user.phone ?? '' })
+    setForm({ name: user.name, loginName: user.loginName ?? '', password: '', role: user.role, jobTitle: user.jobTitle ?? '', phone: user.phone ?? '' })
     setOpen(true)
   }
 
   async function save() {
     setSaving(true)
     setError('')
-    const res = editing
-      ? await apiSend(`/api/users/${editing.id}`, 'PATCH', {
-          name: form.name,
-          role: form.role,
-          jobTitle: form.jobTitle,
-          phone: form.phone,
-          ...(form.password ? { password: form.password } : {}),
-        })
-      : await apiSend('/api/users', 'POST', form)
+    const payload = {
+      name: form.name,
+      role: form.role,
+      jobTitle: form.jobTitle,
+      phone: form.phone,
+      ...(!editing || form.loginName.trim() ? { loginName: form.loginName } : {}),
+      ...(form.password ? { password: form.password } : {}),
+    }
+    const result = editing
+      ? await apiSend(`/api/users/${editing.id}`, 'PATCH', payload)
+      : await apiSend('/api/users', 'POST', payload)
     setSaving(false)
-    if (!res.success) return setError(res.error ?? 'تعذّر الحفظ')
+    if (!result.success) return setError(result.error ?? 'تعذّر الحفظ')
     setOpen(false)
     router.refresh()
   }
 
   async function toggleActive(user: Row) {
     setError('')
-    const res = await apiSend(`/api/users/${user.id}`, 'PATCH', { isActive: !user.isActive })
-    if (!res.success) return setError(res.error ?? 'تعذر تحديث المستخدم')
+    const result = await apiSend(`/api/users/${user.id}`, 'PATCH', { isActive: !user.isActive })
+    if (!result.success) return setError(result.error ?? 'تعذر تحديث المستخدم')
     router.refresh()
   }
 
@@ -92,30 +94,33 @@ export default function UsersClient({ users, availableIdentifiers, meId }: { use
     if (!deleteTarget) return
     setSaving(true)
     setError('')
-    const res = await apiSend(`/api/users/${deleteTarget.id}`, 'DELETE')
+    const result = await apiSend(`/api/users/${deleteTarget.id}`, 'DELETE')
     setSaving(false)
-    if (!res.success) return setError(res.error ?? 'تعذر حذف المستخدم')
+    if (!result.success) return setError(result.error ?? 'تعذر حذف المستخدم')
     setDeleteTarget(null)
     router.refresh()
   }
+
+  const preview = finalLogin(loginPrefix, form.loginName)
 
   return (
     <div className="max-w-5xl mx-auto">
       <PageHeader
         title="المستخدمون"
-        subtitle="إضافة الأعضاء بمعرفات صادرة من السوبر يوزر وإدارة حالتهم وصلاحياتهم."
-        action={<button className="btn btn-primary" onClick={openCreate} disabled={availableIdentifiers.length === 0} title={availableIdentifiers.length ? 'إضافة مستخدم' : 'يجب أن يصدر السوبر يوزر معرفًا أولًا'}><UserPlus size={18} /> إضافة مستخدم</button>}
+        subtitle="أدخل اسم المستخدم بالإنجليزية، وسيضيف النظام معرّف المركز تلقائيًا إلى معرّف الدخول."
+        action={<button className="btn btn-primary" onClick={openCreate} disabled={!loginPrefix} title={loginPrefix ? 'إضافة مستخدم' : 'يجب أن يحدد السوبر يوزر معرّف المركز أولًا'}><UserPlus size={18} /> إضافة مستخدم</button>}
       />
 
-      {availableIdentifiers.length === 0 && (
-        <div className="mb-3 rounded-lg px-3 py-2 text-sm flex items-center gap-2" style={{ background: 'var(--gold-bg)', color: 'var(--gold-dark)' }}>
-          <KeyRound size={16} /> لا توجد معرفات متاحة. اطلب من السوبر يوزر إصدار معرف جديد لهذا المركز.
-        </div>
+      {!loginPrefix && (
+        <div className="mb-3 rounded-lg px-3 py-2 text-sm flex items-center gap-2" style={{ background: 'var(--gold-bg)', color: 'var(--gold-dark)' }}><KeyRound size={16} /> لم يحدد السوبر يوزر معرّف المركز بعد. لا يمكن إنشاء حسابات جديدة قبل تحديده.</div>
+      )}
+      {loginPrefix && (
+        <div className="mb-3 text-sm flex items-center gap-2" style={{ color: 'var(--text-2)' }}><KeyRound size={15} /> معرّف المركز: <code dir="ltr" className="font-bold">{loginPrefix}</code></div>
       )}
       {error && !open && !deleteTarget && <div className="mb-3 rounded-lg px-3 py-2 text-sm" style={{ background: 'var(--danger-bg)', color: 'var(--danger)' }}>{error}</div>}
 
       {users.length === 0 ? (
-        <div className="card"><EmptyState icon={Users} title="لا يوجد مستخدمون بعد" hint="ابدأ بإضافة أعضاء المجلس بعد إصدار معرفاتهم." /></div>
+        <div className="card"><EmptyState icon={Users} title="لا يوجد مستخدمون بعد" hint="ابدأ بإضافة أعضاء المجلس بعد تحديد معرّف المركز." /></div>
       ) : (
         <div className="card divide-y" style={{ borderColor: 'var(--border)' }}>
           {users.map((user) => {
@@ -129,7 +134,7 @@ export default function UsersClient({ users, availableIdentifiers, meId }: { use
                     {!user.isActive && <span className="badge" style={{ background: 'var(--danger-bg)', color: 'var(--danger)' }}>مجمّد</span>}
                   </div>
                   <div className="text-xs mt-0.5 flex items-center gap-2 flex-wrap" style={{ color: 'var(--text-3)' }}>
-                    <span className="flex items-center gap-1" dir="ltr"><KeyRound size={11} /> {user.identifierCode}</span>
+                    <span className="flex items-center gap-1" dir="ltr"><KeyRound size={11} /> {user.username}</span>
                     {user.jobTitle && <span>· {user.jobTitle}</span>}
                     {user.phone && <span className="flex items-center gap-1" dir="ltr"><Phone size={11} /> {user.phone}</span>}
                   </div>
@@ -150,21 +155,30 @@ export default function UsersClient({ users, availableIdentifiers, meId }: { use
         open={open}
         onClose={() => setOpen(false)}
         title={editing ? 'تعديل مستخدم' : 'إضافة مستخدم'}
-        footer={<><button className="btn btn-ghost" onClick={() => setOpen(false)} disabled={saving}>إلغاء</button><button className="btn btn-primary" onClick={save} disabled={saving || (!editing && !form.identifierId)}>{saving && <Loader2 size={16} className="animate-spin" />} حفظ</button></>}
+        footer={<><button className="btn btn-ghost" onClick={() => setOpen(false)} disabled={saving}>إلغاء</button><button className="btn btn-primary" onClick={save} disabled={saving || !loginPrefix || (!editing && !form.loginName.trim())}>{saving && <Loader2 size={16} className="animate-spin" />} حفظ</button></>}
       >
         <div className="space-y-4">
-          <TextField label="الاسم الكامل" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="مثال: عبدالله الأمين" />
-          {editing ? (
-            <TextField label="المعرّف" dir="ltr" value={editing.identifierCode} disabled hint="المعرّف ثابت ولا يمكن تغييره" />
-          ) : (
-            <SelectField label="المعرّف" required dir="ltr" value={form.identifierId} onChange={(e) => setForm({ ...form, identifierId: e.target.value })} options={availableIdentifiers.map((identifier) => ({ value: identifier.id, label: identifier.code }))} placeholder="اختر معرفًا متاحًا" hint="يصدر المعرّف من السوبر يوزر ويستخدم لتسجيل الدخول" />
-          )}
-          <PasswordField label={editing ? 'كلمة مرور جديدة' : 'كلمة المرور'} required={!editing} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder={editing ? 'اترك فارغًا لعدم التغيير' : '••••••'} />
-          <div className="grid grid-cols-2 gap-3">
-            <SelectField label="الدور" required options={ROLE_OPTIONS} value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} />
-            <TextField label="الجوال" required dir="ltr" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="05xxxxxxxx" />
+          <TextField label="الاسم الكامل" required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="مثال: إبراهيم عقل" />
+          <TextField
+            label="اسم المستخدم بالإنجليزية"
+            required={!editing || !!form.loginName}
+            dir="ltr"
+            value={form.loginName}
+            onChange={(event) => setForm({ ...form, loginName: event.target.value.replace(/[^a-zA-Z0-9]/g, '') })}
+            placeholder="IbrahimAkel"
+            hint={editing && !editing.loginName ? 'هذا حساب قديم؛ أدخل اسمًا إنجليزيًا لنقله إلى صيغة معرّف المركز الجديدة' : 'يبدأ بحرف إنجليزي ويقبل الأحرف الإنجليزية والأرقام فقط'}
+            disabled={!loginPrefix}
+          />
+          <div className="rounded-lg px-3 py-2" style={{ background: 'var(--surface-2)' }}>
+            <div className="text-xs" style={{ color: 'var(--text-3)' }}>معرّف الدخول النهائي</div>
+            <code className="font-bold" dir="ltr" style={{ color: 'var(--brand)' }}>{preview || editing?.username || `${loginPrefix ?? 'ABT'}-ibrahimakel`}</code>
           </div>
-          <TextField label="المسمى الوظيفي / الصفة" value={form.jobTitle} onChange={(e) => setForm({ ...form, jobTitle: e.target.value })} placeholder="مثال: مسؤول لجنة التعليم" />
+          <PasswordField label={editing ? 'كلمة مرور جديدة' : 'كلمة المرور'} required={!editing} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} placeholder={editing ? 'اترك فارغًا لعدم التغيير' : '••••••'} />
+          <div className="grid grid-cols-2 gap-3">
+            <SelectField label="الدور" required options={ROLE_OPTIONS} value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })} />
+            <TextField label="الجوال" required dir="ltr" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} placeholder="05xxxxxxxx" />
+          </div>
+          <TextField label="المسمى الوظيفي / الصفة" value={form.jobTitle} onChange={(event) => setForm({ ...form, jobTitle: event.target.value })} placeholder="مثال: مسؤول لجنة التعليم" />
           {error && <div className="text-sm rounded-lg px-3 py-2" style={{ background: 'var(--danger-bg)', color: 'var(--danger)' }}>{error}</div>}
         </div>
       </Modal>

@@ -8,9 +8,10 @@ import {
   TOKEN_COOKIE,
 } from '@/lib/auth'
 import { UserRole } from '@/types'
+import { normalizeLoginIdentifier } from '@/lib/user-identity'
 
 const schema = z.object({
-  username: z.string().trim().min(1, 'اسم المستخدم مطلوب'),
+  username: z.string().trim().min(1, 'معرّف الدخول مطلوب'),
   password: z.string().min(1, 'كلمة المرور مطلوبة'),
 })
 
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
     const { username, password } = parsed.data
 
     const user = await prisma.user.findUnique({
-      where: { username: username.toLowerCase() },
+      where: { username: normalizeLoginIdentifier(username) },
       include: { organization: { select: { isActive: true } } },
     })
 

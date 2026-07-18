@@ -6,15 +6,15 @@ export const dynamic = 'force-dynamic'
 
 export default async function UsersPage() {
   const me = await requireUser(['SECRETARY'])
-  const [users, availableIdentifiers] = await Promise.all([
+  const [users, organization] = await Promise.all([
     prisma.user.findMany({
       where: { organizationId: me.organizationId },
       orderBy: [{ isActive: 'desc' }, { createdAt: 'asc' }],
       select: {
         id: true,
         name: true,
+        loginName: true,
         username: true,
-        identifier: { select: { code: true } },
         role: true,
         jobTitle: true,
         phone: true,
@@ -22,12 +22,8 @@ export default async function UsersPage() {
         isActive: true,
       },
     }),
-    prisma.userIdentifier.findMany({
-      where: { organizationId: me.organizationId, isActive: true, assignedUser: null },
-      orderBy: { code: 'asc' },
-      select: { id: true, code: true },
-    }),
+    prisma.organization.findUniqueOrThrow({ where: { id: me.organizationId }, select: { loginPrefix: true } }),
   ])
 
-  return <UsersClient users={users.map((user) => ({ ...user, identifierCode: user.identifier?.code ?? user.username.toUpperCase() }))} availableIdentifiers={availableIdentifiers} meId={me.id} />
+  return <UsersClient users={users} loginPrefix={organization.loginPrefix} meId={me.id} />
 }

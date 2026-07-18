@@ -21,18 +21,19 @@ datasource db {
 //  المؤسسة / الجهة (جذر تعدّد المستأجرين)
 // ============================================================
 model Organization {
-  id        String   @id @default(cuid())
-  name      String
-  logoUrl   String?
-  settings  String   @default("{}") // JSON كنص — إعدادات عامة (العملة الافتراضية…)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  name        String
+  loginPrefix String?
+  logoUrl     String?
+  settings    String   @default("{}") // JSON كنص — إعدادات عامة (العملة الافتراضية…)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  users       User[]
-  councils    Council[]
-  identifiers UserIdentifier[]
+  users    User[]
+  councils Council[]
 
+  @@index([loginPrefix])
   @@map("organizations")
 }
 
@@ -43,8 +44,8 @@ model Organization {
 model User {
   id             String   @id @default(cuid())
   organizationId String
-  identifierId   String?  @unique
   name           String
+  loginName      String?
   username       String   @unique // اسم الدخول
   passwordHash   String
   role           String   @default("MEMBER")
@@ -56,8 +57,7 @@ model User {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  identifier   UserIdentifier? @relation("UserIdentifierAssignment", fields: [identifierId], references: [id], onDelete: SetNull)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   memberships           CouncilMember[]
   departmentMemberships DepartmentMember[]
@@ -76,7 +76,6 @@ model User {
   followUps             FollowUpEntry[]
   ownedDeliverables     Deliverable[]       @relation("DeliverableOwner")
   createdDeliverables   Deliverable[]       @relation("DeliverableCreator")
-  createdIdentifiers    UserIdentifier[]    @relation("IdentifierCreator")
   responsibleCosts      Cost[]              @relation("CostResponsible")
   attachments           Attachment[]
   documentLinks         DocumentLink[]
@@ -87,24 +86,6 @@ model User {
 
   @@index([organizationId])
   @@map("users")
-}
-
-// معرفات الدخول التي يصدرها السوبر يوزر لكل مركز.
-model UserIdentifier {
-  id             String   @id @default(cuid())
-  organizationId String
-  code           String   @unique
-  isActive       Boolean  @default(true)
-  createdById    String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  createdBy    User?        @relation("IdentifierCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  assignedUser User?        @relation("UserIdentifierAssignment")
-
-  @@index([organizationId, isActive])
-  @@map("user_identifiers")
 }
 
 // ============================================================

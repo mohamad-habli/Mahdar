@@ -128,7 +128,7 @@ export default function LoginPage() {
                   className="input pr-10"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="مثال: MHD-1001"
+                  placeholder="مثال: ABT-ibrahimakel"
                   autoComplete="username"
                   dir="ltr"
                   style={{ textAlign: 'right' }}

@@ -3,11 +3,11 @@ import { prisma } from '@/lib/prisma'
 import { hashPassword } from '@/lib/auth'
 import { authorize, handle, ok, ApiError } from '@/lib/api'
 import { logAudit } from '@/lib/audit'
-import { normalizePersonName, normalizePhone } from '@/lib/user-identity'
+import { buildLoginIdentifier, LOGIN_NAME_PATTERN, normalizeLoginName, normalizePersonName, normalizePhone } from '@/lib/user-identity'
 
 const createSchema = z.object({
   name: z.string().trim().min(2, 'الاسم مطلوب'),
-  identifierId: z.string().trim().min(1, 'اختر معرّفًا صادرًا من السوبر يوزر'),
+  loginName: z.string().trim().min(3, 'اسم المستخدم مطلوب'),
   password: z.string().min(6, 'كلمة المرور 6 أحرف على الأقل'),
   role: z.enum(['SECRETARY', 'CHAIR', 'DEPT_MANAGER', 'MEMBER']),
   jobTitle: z.string().trim().optional(),
@@ -21,18 +21,15 @@ export async function POST(req: Request) {
     const body = createSchema.parse(await req.json())
     const name = normalizePersonName(body.name)
     const phone = normalizePhone(body.phone)
+    const loginName = normalizeLoginName(body.loginName)
     if (phone.length < 6) throw new ApiError('رقم الهاتف غير صالح', 400)
+    if (!LOGIN_NAME_PATTERN.test(body.loginName)) throw new ApiError('اسم المستخدم يجب أن يبدأ بحرف إنجليزي ويحتوي أحرفًا إنجليزية وأرقامًا فقط', 400)
 
-    const identifier = await prisma.userIdentifier.findFirst({
-      where: {
-        id: body.identifierId,
-        organizationId: user.organizationId,
-        isActive: true,
-        assignedUser: null,
-      },
-      select: { id: true, code: true },
+    const organization = await prisma.organization.findUnique({
+      where: { id: user.organizationId },
+      select: { loginPrefix: true },
     })
-    if (!identifier) throw new ApiError('المعرّف غير متاح أو مرتبط بمستخدم آخر', 409)
+    if (!organization?.loginPrefix) throw new ApiError('يجب أن يحدد السوبر يوزر معرّف المركز أولًا', 409)
 
     const duplicate = await prisma.user.findFirst({
       where: {
@@ -44,15 +41,15 @@ export async function POST(req: Request) {
     if (duplicate?.name === name) throw new ApiError('يوجد مستخدم بالاسم نفسه في هذا المركز', 409)
     if (duplicate?.phone === phone) throw new ApiError('رقم الهاتف مستخدم بالفعل في هذا المركز', 409)
 
-    const username = identifier.code.toLowerCase()
+    const username = buildLoginIdentifier(organization.loginPrefix, loginName)
     const usernameExists = await prisma.user.findUnique({ where: { username }, select: { id: true } })
-    if (usernameExists) throw new ApiError('المعرّف مستخدم بالفعل', 409)
+    if (usernameExists) throw new ApiError('اسم المستخدم مستخدم بالفعل في هذا المركز', 409)
 
     const created = await prisma.user.create({
       data: {
         organizationId: user.organizationId,
-        identifierId: identifier.id,
         name,
+        loginName,
         username,
         passwordHash: await hashPassword(body.password),
         role: body.role,
@@ -60,7 +57,7 @@ export async function POST(req: Request) {
         phone,
         email: body.email || null,
       },
-      select: { id: true, name: true, username: true, role: true, identifier: { select: { code: true } } },
+      select: { id: true, name: true, loginName: true, username: true, role: true },
     })
 
     await logAudit({

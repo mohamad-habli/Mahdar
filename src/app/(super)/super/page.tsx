@@ -10,15 +10,6 @@ export default async function SuperPage() {
     orderBy: { createdAt: 'desc' },
     include: {
       _count: { select: { users: true, councils: true } },
-      identifiers: {
-        orderBy: { createdAt: 'desc' },
-        select: {
-          id: true,
-          code: true,
-          isActive: true,
-          assignedUser: { select: { id: true, name: true } },
-        },
-      },
     },
   })
 
@@ -27,11 +18,11 @@ export default async function SuperPage() {
       organizations={organizations.map((o) => ({
         id: o.id,
         name: o.name,
+        loginPrefix: o.loginPrefix,
         isActive: o.isActive,
         isCurrent: o.id === me.organizationId,
         usersCount: o._count.users,
         councilsCount: o._count.councils,
-        identifiers: o.identifiers,
       }))}
     />
   )
