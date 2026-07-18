@@ -7,6 +7,7 @@ import PageHeader from '@/components/PageHeader'
 import Modal from '@/components/ui/Modal'
 import { PasswordField, TextField } from '@/components/ui/Field'
 import { apiSend } from '@/lib/client'
+import SecretaryManager, { type SecretaryRow } from './SecretaryManager'
 
 interface OrganizationRow {
   id: string
@@ -16,6 +17,7 @@ interface OrganizationRow {
   isCurrent: boolean
   usersCount: number
   councilsCount: number
+  secretaries: SecretaryRow[]
 }
 
 const emptyForm = {
@@ -117,6 +119,12 @@ export default function SuperClient({ organizations }: { organizations: Organiza
             </div>
             <div className="mt-4 pt-3 border-t flex items-center gap-2 flex-wrap" style={{ borderColor: 'var(--border)' }}>
               <button className="btn btn-ghost text-sm" onClick={() => { setError(''); setPrefixValue(organization.loginPrefix ?? ''); setPrefixTarget(organization) }}><KeyRound size={16} /> معرّف المركز</button>
+              <SecretaryManager
+                organizationId={organization.id}
+                organizationName={organization.name}
+                loginPrefix={organization.loginPrefix}
+                secretaries={organization.secretaries}
+              />
               <button className="btn btn-ghost text-sm" onClick={() => toggleOrganization(organization)} style={{ color: organization.isActive ? 'var(--warning)' : 'var(--success)' }}><Power size={16} /> {organization.isActive ? 'تجميد' : 'إعادة تفعيل'}</button>
               <button className="btn btn-ghost text-sm" onClick={() => { setError(''); setDeleteConfirmation(''); setDeleteTarget(organization) }} disabled={organization.isCurrent} title={organization.isCurrent ? 'لا يمكن حذف المركز الذي يحتوي حسابك' : 'حذف المركز نهائيًا'} style={{ color: 'var(--danger)', marginInlineStart: 'auto' }}><Trash2 size={16} /> حذف</button>
             </div>

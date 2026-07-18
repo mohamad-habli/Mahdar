@@ -6,6 +6,7 @@ import { logAudit } from '@/lib/audit'
 import { buildLoginIdentifier, LOGIN_NAME_PATTERN, normalizeLoginName, normalizePersonName, normalizePhone } from '@/lib/user-identity'
 
 const createSchema = z.object({
+  organizationId: z.string().trim().min(1).optional(),
   name: z.string().trim().min(2, 'الاسم مطلوب'),
   loginName: z.string().trim().min(3, 'اسم المستخدم مطلوب'),
   password: z.string().min(6, 'كلمة المرور 6 أحرف على الأقل'),
@@ -17,8 +18,13 @@ const createSchema = z.object({
 
 export async function POST(req: Request) {
   return handle(async () => {
-    const user = await authorize(['SECRETARY'])
+    const user = await authorize(['SECRETARY', 'SUPER_USER'])
     const body = createSchema.parse(await req.json())
+    const organizationId = user.role === 'SUPER_USER' ? body.organizationId : user.organizationId
+    if (!organizationId) throw new ApiError('المركز مطلوب', 400)
+    if (user.role === 'SUPER_USER' && body.role !== 'SECRETARY') {
+      throw new ApiError('يمكن للسوبر يوزر إنشاء أمناء السر فقط من هذه الشاشة', 403)
+    }
     const name = normalizePersonName(body.name)
     const phone = normalizePhone(body.phone)
     const loginName = normalizeLoginName(body.loginName)
@@ -26,14 +32,15 @@ export async function POST(req: Request) {
     if (!LOGIN_NAME_PATTERN.test(body.loginName)) throw new ApiError('اسم المستخدم يجب أن يبدأ بحرف إنجليزي ويحتوي أحرفًا إنجليزية وأرقامًا فقط', 400)
 
     const organization = await prisma.organization.findUnique({
-      where: { id: user.organizationId },
+      where: { id: organizationId },
       select: { loginPrefix: true },
     })
-    if (!organization?.loginPrefix) throw new ApiError('يجب أن يحدد السوبر يوزر معرّف المركز أولًا', 409)
+    if (!organization) throw new ApiError('المركز غير موجود', 404)
+    if (!organization.loginPrefix) throw new ApiError('يجب أن يحدد السوبر يوزر معرّف المركز أولًا', 409)
 
     const duplicate = await prisma.user.findFirst({
       where: {
-        organizationId: user.organizationId,
+        organizationId,
         OR: [{ name }, { phone }],
       },
       select: { name: true, phone: true },
@@ -47,7 +54,7 @@ export async function POST(req: Request) {
 
     const created = await prisma.user.create({
       data: {
-        organizationId: user.organizationId,
+        organizationId,
         name,
         loginName,
         username,
@@ -61,7 +68,7 @@ export async function POST(req: Request) {
     })
 
     await logAudit({
-      organizationId: user.organizationId,
+      organizationId,
       userId: user.id,
       action: 'CREATE',
       entityType: 'User',

@@ -18,14 +18,19 @@ const updateSchema = z.object({
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   return handle(async () => {
-    const actor = await authorize(['SECRETARY'])
+    const actor = await authorize(['SECRETARY', 'SUPER_USER'])
     const { id } = await params
     const body = updateSchema.parse(await req.json())
 
     const target = await prisma.user.findFirst({
-      where: { id, organizationId: actor.organizationId },
+      where: actor.role === 'SUPER_USER'
+        ? { id, role: 'SECRETARY' }
+        : { id, organizationId: actor.organizationId },
     })
     if (!target) throw new ApiError('المستخدم غير موجود', 404)
+    if (actor.role === 'SUPER_USER' && body.role !== undefined && body.role !== 'SECRETARY') {
+      throw new ApiError('يمكن للسوبر يوزر إدارة أمناء السر فقط من هذه الشاشة', 403)
+    }
 
     // منع أمين السر من تعطيل نفسه
     if (id === actor.id && body.isActive === false) {
@@ -43,7 +48,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (name !== undefined || phone !== undefined) {
       const duplicate = await prisma.user.findFirst({
         where: {
-          organizationId: actor.organizationId,
+          organizationId: target.organizationId,
           id: { not: id },
           OR: [
             ...(name !== undefined ? [{ name }] : []),
@@ -59,7 +64,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     let username: string | undefined
     if (loginName !== undefined) {
       const organization = await prisma.organization.findUnique({
-        where: { id: actor.organizationId },
+        where: { id: target.organizationId },
         select: { loginPrefix: true },
       })
       if (!organization?.loginPrefix) throw new ApiError('يجب أن يحدد السوبر يوزر معرّف المركز أولًا', 409)
@@ -83,7 +88,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     })
 
     await logAudit({
-      organizationId: actor.organizationId,
+      organizationId: target.organizationId,
       userId: actor.id,
       action: 'UPDATE',
       entityType: 'User',
@@ -97,13 +102,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   return handle(async () => {
-    const actor = await authorize(['SECRETARY'])
+    const actor = await authorize(['SECRETARY', 'SUPER_USER'])
     const { id } = await params
     if (id === actor.id) throw new ApiError('لا يمكنك حذف حسابك', 400)
 
     const target = await prisma.user.findFirst({
-      where: { id, organizationId: actor.organizationId },
-      select: { id: true, name: true, role: true },
+      where: actor.role === 'SUPER_USER'
+        ? { id, role: 'SECRETARY' }
+        : { id, organizationId: actor.organizationId },
+      select: { id: true, organizationId: true, name: true, role: true },
     })
     if (!target) throw new ApiError('المستخدم غير موجود', 404)
     if (target.role === 'SUPER_USER') throw new ApiError('لا يمكن حذف حساب السوبر يوزر', 403)
@@ -120,7 +127,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     })
 
     await logAudit({
-      organizationId: actor.organizationId,
+      organizationId: target.organizationId,
       userId: actor.id,
       action: 'DELETE',
       entityType: 'User',

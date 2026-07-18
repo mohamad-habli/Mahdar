@@ -10,6 +10,20 @@ export default async function SuperPage() {
     orderBy: { createdAt: 'desc' },
     include: {
       _count: { select: { users: true, councils: true } },
+      users: {
+        where: { role: 'SECRETARY' },
+        orderBy: { name: 'asc' },
+        select: {
+          id: true,
+          name: true,
+          loginName: true,
+          username: true,
+          jobTitle: true,
+          phone: true,
+          email: true,
+          isActive: true,
+        },
+      },
     },
   })
 
@@ -23,6 +37,7 @@ export default async function SuperPage() {
         isCurrent: o.id === me.organizationId,
         usersCount: o._count.users,
         councilsCount: o._count.councils,
+        secretaries: o.users,
       }))}
     />
   )
