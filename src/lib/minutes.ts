@@ -140,11 +140,11 @@ export async function loadMeetingMinutes(meetingId: string, organizationId: stri
       versions: m.versions.map((version) => ({
         id: version.id,
         reason: version.reason,
-        authorName: version.createdBy.name,
+        authorName: version.createdBy?.name ?? 'مستخدم محذوف',
         createdAt: version.createdAt.toISOString(),
       })),
       items,
-      addenda: m.addenda.map((a) => ({ id: a.id, content: a.content, authorName: a.createdBy.name, createdAt: a.createdAt.toISOString() })),
+      addenda: m.addenda.map((a) => ({ id: a.id, content: a.content, authorName: a.createdBy?.name ?? 'مستخدم محذوف', createdAt: a.createdAt.toISOString() })),
     },
   }
 }

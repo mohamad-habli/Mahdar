@@ -3,12 +3,13 @@ import { prisma } from '@/lib/prisma'
 import { hashPassword } from '@/lib/auth'
 import { authorize, handle, ok, ApiError } from '@/lib/api'
 import { logAudit } from '@/lib/audit'
+import { normalizePersonName, normalizePhone } from '@/lib/user-identity'
 
 const updateSchema = z.object({
   name: z.string().trim().min(2).optional(),
   role: z.enum(['SECRETARY', 'CHAIR', 'DEPT_MANAGER', 'MEMBER']).optional(),
   jobTitle: z.string().trim().optional().nullable(),
-  phone: z.string().trim().optional().nullable(),
+  phone: z.string().trim().min(6, 'رقم الهاتف مطلوب').optional(),
   email: z.string().trim().email('بريد غير صحيح').optional().nullable().or(z.literal('')),
   isActive: z.boolean().optional(),
   password: z.string().min(6, 'كلمة المرور 6 أحرف على الأقل').optional(),
@@ -30,13 +31,33 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       throw new ApiError('لا يمكنك تعطيل حسابك', 400)
     }
 
+    const name = body.name !== undefined ? normalizePersonName(body.name) : undefined
+    const phone = body.phone !== undefined ? normalizePhone(body.phone) : undefined
+    if (phone !== undefined && phone.length < 6) throw new ApiError('رقم الهاتف غير صالح', 400)
+
+    if (name !== undefined || phone !== undefined) {
+      const duplicate = await prisma.user.findFirst({
+        where: {
+          organizationId: actor.organizationId,
+          id: { not: id },
+          OR: [
+            ...(name !== undefined ? [{ name }] : []),
+            ...(phone !== undefined ? [{ phone }] : []),
+          ],
+        },
+        select: { name: true, phone: true },
+      })
+      if (name !== undefined && duplicate?.name === name) throw new ApiError('يوجد مستخدم بالاسم نفسه في هذا المركز', 409)
+      if (phone !== undefined && duplicate?.phone === phone) throw new ApiError('رقم الهاتف مستخدم بالفعل في هذا المركز', 409)
+    }
+
     await prisma.user.update({
       where: { id },
       data: {
-        ...(body.name !== undefined ? { name: body.name } : {}),
+        ...(name !== undefined ? { name } : {}),
         ...(body.role !== undefined ? { role: body.role } : {}),
         ...(body.jobTitle !== undefined ? { jobTitle: body.jobTitle || null } : {}),
-        ...(body.phone !== undefined ? { phone: body.phone || null } : {}),
+        ...(phone !== undefined ? { phone } : {}),
         ...(body.email !== undefined ? { email: body.email || null } : {}),
         ...(body.isActive !== undefined ? { isActive: body.isActive } : {}),
         ...(body.password ? { passwordHash: await hashPassword(body.password) } : {}),
@@ -50,6 +71,43 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       entityType: 'User',
       entityId: id,
       details: { fields: Object.keys(body) },
+    })
+
+    return ok({ id })
+  })
+}
+
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  return handle(async () => {
+    const actor = await authorize(['SECRETARY'])
+    const { id } = await params
+    if (id === actor.id) throw new ApiError('لا يمكنك حذف حسابك', 400)
+
+    const target = await prisma.user.findFirst({
+      where: { id, organizationId: actor.organizationId },
+      select: { id: true, name: true, role: true },
+    })
+    if (!target) throw new ApiError('المستخدم غير موجود', 404)
+    if (target.role === 'SUPER_USER') throw new ApiError('لا يمكن حذف حساب السوبر يوزر', 403)
+
+    await prisma.$transaction(async (tx) => {
+      await tx.taskAssignee.deleteMany({ where: { userId: id } })
+      await tx.task.updateMany({ where: { assigneeId: id }, data: { assigneeId: null } })
+      await tx.deliverable.updateMany({ where: { ownerId: id }, data: { ownerId: null } })
+      await tx.cost.updateMany({ where: { responsibleId: id }, data: { responsibleId: null } })
+      await tx.department.updateMany({ where: { managerId: id }, data: { managerId: null } })
+      await tx.council.updateMany({ where: { chairId: id }, data: { chairId: null } })
+      await tx.attendance.updateMany({ where: { userId: id }, data: { userId: null, guestName: target.name } })
+      await tx.user.delete({ where: { id } })
+    })
+
+    await logAudit({
+      organizationId: actor.organizationId,
+      userId: actor.id,
+      action: 'DELETE',
+      entityType: 'User',
+      entityId: id,
+      details: { name: target.name, role: target.role },
     })
 
     return ok({ id })

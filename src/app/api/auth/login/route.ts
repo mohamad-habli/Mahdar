@@ -29,9 +29,10 @@ export async function POST(request: Request) {
 
     const user = await prisma.user.findUnique({
       where: { username: username.toLowerCase() },
+      include: { organization: { select: { isActive: true } } },
     })
 
-    if (!user || !user.isActive) {
+    if (!user || !user.isActive || (user.role !== 'SUPER_USER' && !user.organization.isActive)) {
       return NextResponse.json(
         { success: false, error: 'اسم المستخدم أو كلمة المرور غير صحيحة' },
         { status: 401 }

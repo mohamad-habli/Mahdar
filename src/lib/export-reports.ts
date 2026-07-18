@@ -1,7 +1,6 @@
-import { readFile } from 'node:fs/promises'
-import path from 'node:path'
 import { prisma } from './prisma'
 import { parseOrganizationBranding, type OrganizationBranding } from './branding'
+import { readUploadedLogoUrl } from './uploads'
 
 export const REPORT_TYPES = ['MINUTES', 'TASKS', 'DELIVERABLES', 'OVERDUE', 'DEPARTMENT', 'ASSIGNEE', 'COSTS'] as const
 export type ExportReportType = (typeof REPORT_TYPES)[number]
@@ -132,7 +131,7 @@ export async function loadExportReport(params: {
         ['الوقت', [meeting.startTime, meeting.endTime].filter(Boolean).join(' - ') || 'غير محدد'],
         ['المكان / الرابط', meeting.location || meeting.onlineUrl || 'غير محدد'],
         ['حالة المحضر', STATUS[minutes.status] ?? minutes.status],
-        ['أمين السر', minutes.createdBy.name],
+        ['أمين السر', minutes.createdBy?.name ?? 'مستخدم محذوف'],
         ['الاعتماد', minutes.approvedBy?.name ?? 'لم يعتمد بعد'],
       ],
       sections: [
@@ -211,15 +210,8 @@ function escapeHtml(value: string) {
 }
 
 async function logoDataUrl(logoUrl: string | null) {
-  if (!logoUrl?.startsWith('/uploads/')) return null
-  try {
-    const file = await readFile(path.join(process.cwd(), 'public', ...logoUrl.split('/').filter(Boolean)))
-    const extension = path.extname(logoUrl).slice(1).toLowerCase()
-    const mime = extension === 'svg' ? 'image/svg+xml' : extension === 'png' ? 'image/png' : 'image/jpeg'
-    return `data:${mime};base64,${file.toString('base64')}`
-  } catch {
-    return null
-  }
+  const asset = await readUploadedLogoUrl(logoUrl)
+  return asset ? `data:${asset.contentType};base64,${asset.data.toString('base64')}` : null
 }
 
 export async function renderReportHtml(report: ExportReportDocument) {

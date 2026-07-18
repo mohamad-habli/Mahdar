@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { ImageUp, Loader2, Palette, Save } from 'lucide-react'
+import { ImageUp, Loader2, Palette, Save, Trash2 } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import { SelectField, TextField } from '@/components/ui/Field'
 import { apiSend } from '@/lib/client'
@@ -38,7 +38,17 @@ export default function BrandingSettingsClient({ initial }: { initial: Initial }
     setUploading(false)
     if (!response.ok || !result.success) { setError(result.error ?? 'تعذر رفع الشعار'); return }
     setForm({ ...form, logoUrl: result.data.logoUrl })
+    if (inputRef.current) inputRef.current.value = ''
     setMessage('تم رفع الشعار.')
+  }
+
+  async function deleteLogo() {
+    setUploading(true); setError(''); setMessage('')
+    const result = await apiSend('/api/organization/branding/logo', 'DELETE')
+    setUploading(false)
+    if (!result.success) { setError(result.error ?? 'تعذر حذف الشعار'); return }
+    setForm({ ...form, logoUrl: null })
+    setMessage('تم حذف شعار المركز.')
   }
 
   return (
@@ -59,6 +69,11 @@ export default function BrandingSettingsClient({ initial }: { initial: Initial }
           <button className="btn btn-ghost w-full mt-3" onClick={() => inputRef.current?.click()} disabled={uploading}>
             {uploading ? <Loader2 size={16} className="animate-spin" /> : <ImageUp size={16} />} رفع الشعار
           </button>
+          {form.logoUrl && (
+            <button className="btn btn-ghost w-full mt-2" onClick={deleteLogo} disabled={uploading} style={{ color: 'var(--danger)' }}>
+              <Trash2 size={16} /> حذف الشعار
+            </button>
+          )}
           <p className="text-xs mt-2" style={{ color: 'var(--text-3)' }}>PNG أو JPG أو SVG، حتى 2MB.</p>
         </div>
 
@@ -84,9 +99,12 @@ export default function BrandingSettingsClient({ initial }: { initial: Initial }
             <ColorField label="اللون الرئيسي" value={form.primaryColor} onChange={(primaryColor) => setForm({ ...form, primaryColor })} />
             <ColorField label="اللون الثانوي" value={form.secondaryColor} onChange={(secondaryColor) => setForm({ ...form, secondaryColor })} />
           </div>
-          <div className="rounded-lg border p-4" style={{ borderColor: form.secondaryColor, borderRightWidth: 5 }}>
-            <div className="font-bold" style={{ color: form.primaryColor }}>{form.name || 'اسم المركز'}</div>
-            <div className="text-sm mt-1" style={{ color: 'var(--text-2)' }}>{REPORT_THEME_LABELS[form.reportTheme]} · نموذج معاينة للهوية</div>
+          <div className="rounded-lg border p-4 flex items-center gap-4" style={{ borderColor: form.secondaryColor, borderRightWidth: 5 }}>
+            {form.logoUrl && <img src={form.logoUrl} alt="شعار المركز في التقرير" className="w-16 h-16 object-contain shrink-0" />}
+            <div>
+              <div className="font-bold" style={{ color: form.primaryColor }}>{form.name || 'اسم المركز'}</div>
+              <div className="text-sm mt-1" style={{ color: 'var(--text-2)' }}>{REPORT_THEME_LABELS[form.reportTheme]} · نموذج معاينة لرأس التقرير</div>
+            </div>
           </div>
           {error && <div className="rounded-lg px-3 py-2 text-sm" style={{ background: 'var(--danger-bg)', color: 'var(--danger)' }}>{error}</div>}
           {message && <div className="rounded-lg px-3 py-2 text-sm" style={{ background: 'var(--success-bg)', color: 'var(--success)' }}>{message}</div>}

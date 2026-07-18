@@ -1,5 +1,3 @@
-import { readFile } from 'node:fs/promises'
-import path from 'node:path'
 import {
   AlignmentType,
   BorderStyle,
@@ -15,6 +13,7 @@ import {
   WidthType,
 } from 'docx'
 import type { ExportReportDocument, ExportReportSection } from './export-reports'
+import { readUploadedLogoUrl } from './uploads'
 
 function color(hex: string) {
   return hex.replace('#', '').toUpperCase()
@@ -74,11 +73,11 @@ function sectionBlocks(section: ExportReportSection, primary: string) {
 }
 
 async function logoRun(logoUrl: string | null) {
-  if (!logoUrl?.startsWith('/uploads/')) return null
+  const asset = await readUploadedLogoUrl(logoUrl)
+  if (!asset) return null
   try {
-    const source = await readFile(path.join(process.cwd(), 'public', ...logoUrl.split('/').filter(Boolean)))
     const sharp = (await import('sharp')).default
-    const png = await sharp(source).resize({ width: 160, height: 160, fit: 'inside' }).png().toBuffer()
+    const png = await sharp(asset.data).resize({ width: 180, height: 180, fit: 'inside' }).png().toBuffer()
     return new ImageRun({ data: png, type: 'png', transformation: { width: 72, height: 72 }, altText: { title: 'شعار المركز', description: 'شعار المركز', name: 'logo' } })
   } catch {
     return null

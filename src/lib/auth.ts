@@ -53,11 +53,14 @@ export async function getSession(): Promise<AuthUser | null> {
         phone: true,
         email: true,
         avatarUrl: true,
+        organization: { select: { isActive: true } },
       },
     })
 
     if (!user) return null
-    return user as AuthUser
+    if (user.role !== 'SUPER_USER' && !user.organization.isActive) return null
+    const { organization: _organization, ...authUser } = user
+    return authUser as AuthUser
   } catch {
     return null
   }

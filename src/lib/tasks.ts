@@ -115,8 +115,8 @@ export function serializeTask(t: TaskRow): TaskFull {
     sourceMeetingTitle: t.sourceMeeting?.title ?? null,
     createdAt: t.createdAt.toISOString(),
     updatedAt: t.updatedAt.toISOString(),
-    notes: t.notes.map((n) => ({ id: n.id, body: n.body, authorName: n.author.name, createdAt: n.createdAt.toISOString() })),
-    followUps: t.followUps.map((n) => ({ id: n.id, type: n.type, body: n.body, authorName: n.author.name, needsEscalation: n.needsEscalation, createdAt: n.createdAt.toISOString() })),
+    notes: t.notes.map((n) => ({ id: n.id, body: n.body, authorName: n.author?.name ?? 'مستخدم محذوف', createdAt: n.createdAt.toISOString() })),
+    followUps: t.followUps.map((n) => ({ id: n.id, type: n.type, body: n.body, authorName: n.author?.name ?? 'مستخدم محذوف', needsEscalation: n.needsEscalation, createdAt: n.createdAt.toISOString() })),
     costs: t.costs.map((c) => ({ id: c.id, description: c.description, expectedAmount: c.expectedAmount, actualAmount: c.actualAmount, currency: c.currency, paymentStatus: c.paymentStatus })),
   }
 }

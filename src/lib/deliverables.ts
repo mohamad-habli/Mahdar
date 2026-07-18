@@ -58,7 +58,7 @@ export async function loadDeliverables(where: Prisma.DeliverableWhereInput): Pro
       id: entry.id,
       type: entry.type,
       body: entry.body,
-      authorName: entry.author.name,
+      authorName: entry.author?.name ?? 'مستخدم محذوف',
       needsEscalation: entry.needsEscalation,
       createdAt: entry.createdAt.toISOString(),
     })),

@@ -116,7 +116,7 @@ export default function LoginPage() {
                 className="block mb-1.5 text-sm font-semibold"
                 style={{ color: 'var(--text-2)' }}
               >
-                اسم المستخدم
+                  المعرّف
               </label>
               <div className="relative">
                 <User
@@ -128,7 +128,7 @@ export default function LoginPage() {
                   className="input pr-10"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="مثال: amin"
+                  placeholder="مثال: MHD-1001"
                   autoComplete="username"
                   dir="ltr"
                   style={{ textAlign: 'right' }}

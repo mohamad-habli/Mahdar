@@ -25,11 +25,13 @@ model Organization {
   name      String
   logoUrl   String?
   settings  String   @default("{}") // JSON كنص — إعدادات عامة (العملة الافتراضية…)
+  isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users    User[]
-  councils Council[]
+  users       User[]
+  councils    Council[]
+  identifiers UserIdentifier[]
 
   @@map("organizations")
 }
@@ -41,6 +43,7 @@ model Organization {
 model User {
   id             String   @id @default(cuid())
   organizationId String
+  identifierId   String?  @unique
   name           String
   username       String   @unique // اسم الدخول
   passwordHash   String
@@ -53,34 +56,55 @@ model User {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  identifier   UserIdentifier? @relation("UserIdentifierAssignment", fields: [identifierId], references: [id], onDelete: SetNull)
 
-  memberships        CouncilMember[]
+  memberships           CouncilMember[]
   departmentMemberships DepartmentMember[]
-  chairedCouncils    Council[]       @relation("CouncilChair")
-  managedDepartments Department[]    @relation("DepartmentManager")
-  createdMeetings    Meeting[]       @relation("MeetingCreator")
-  attendances        Attendance[]
-  createdMinutes     Minutes[]       @relation("MinutesCreator")
-  approvedMinutes    Minutes[]       @relation("MinutesApprover")
-  addenda            MinuteAddendum[]
-  minutesVersions    MinutesVersion[]
-  assignedTasks      Task[]          @relation("TaskAssignee")
-  taskAssignments    TaskAssignee[]
-  createdTasks       Task[]          @relation("TaskCreator")
-  taskNotes          TaskNote[]
-  followUps          FollowUpEntry[]
-  ownedDeliverables  Deliverable[]   @relation("DeliverableOwner")
-  responsibleCosts   Cost[]          @relation("CostResponsible")
-  attachments        Attachment[]
-  documentLinks      DocumentLink[]
-  reminders          Reminder[]
-  reminderPreference ReminderPreference?
-  notifications      Notification[]
-  auditLogs          AuditLog[]
+  chairedCouncils       Council[]           @relation("CouncilChair")
+  managedDepartments    Department[]        @relation("DepartmentManager")
+  createdMeetings       Meeting[]           @relation("MeetingCreator")
+  attendances           Attendance[]
+  createdMinutes        Minutes[]           @relation("MinutesCreator")
+  approvedMinutes       Minutes[]           @relation("MinutesApprover")
+  addenda               MinuteAddendum[]
+  minutesVersions       MinutesVersion[]
+  assignedTasks         Task[]              @relation("TaskAssignee")
+  taskAssignments       TaskAssignee[]
+  createdTasks          Task[]              @relation("TaskCreator")
+  taskNotes             TaskNote[]
+  followUps             FollowUpEntry[]
+  ownedDeliverables     Deliverable[]       @relation("DeliverableOwner")
+  createdDeliverables   Deliverable[]       @relation("DeliverableCreator")
+  createdIdentifiers    UserIdentifier[]    @relation("IdentifierCreator")
+  responsibleCosts      Cost[]              @relation("CostResponsible")
+  attachments           Attachment[]
+  documentLinks         DocumentLink[]
+  reminders             Reminder[]
+  reminderPreference    ReminderPreference?
+  notifications         Notification[]
+  auditLogs             AuditLog[]
 
   @@index([organizationId])
   @@map("users")
+}
+
+// معرفات الدخول التي يصدرها السوبر يوزر لكل مركز.
+model UserIdentifier {
+  id             String   @id @default(cuid())
+  organizationId String
+  code           String   @unique
+  isActive       Boolean  @default(true)
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User?        @relation("IdentifierCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  assignedUser User?        @relation("UserIdentifierAssignment")
+
+  @@index([organizationId, isActive])
+  @@map("user_identifiers")
 }
 
 // ============================================================
@@ -89,14 +113,14 @@ model User {
 //  recurrence: NONE | WEEKLY | MONTHLY  (للاجتماعات المتكررة)
 // ============================================================
 model Council {
-  id             String   @id @default(cuid())
+  id             String  @id @default(cuid())
   organizationId String
   parentId       String?
   chairId        String?
   name           String
   description    String?
-  type           String   @default("COUNCIL")
-  isActive       Boolean  @default(true)
+  type           String  @default("COUNCIL")
+  isActive       Boolean @default(true)
 
   // الاجتماع المتكرر
   recurrence       String  @default("NONE")
@@ -112,13 +136,13 @@ model Council {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   parent       Council?     @relation("CouncilTree", fields: [parentId], references: [id])
   children     Council[]    @relation("CouncilTree")
-  chair        User?        @relation("CouncilChair", fields: [chairId], references: [id])
+  chair        User?        @relation("CouncilChair", fields: [chairId], references: [id], onDelete: SetNull)
 
-  members     CouncilMember[]
-  departments Department[]
-  meetings    Meeting[]
-  tasks       Task[]
-  deliverables Deliverable[]
+  members       CouncilMember[]
+  departments   Department[]
+  meetings      Meeting[]
+  tasks         Task[]
+  deliverables  Deliverable[]
   documentLinks DocumentLink[]
 
   @@index([organizationId])
@@ -162,17 +186,17 @@ model Department {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  council  Council      @relation(fields: [councilId], references: [id], onDelete: Cascade)
-  parent   Department?  @relation("DepartmentTree", fields: [parentId], references: [id])
-  children Department[] @relation("DepartmentTree")
-  manager  User?        @relation("DepartmentManager", fields: [managerId], references: [id])
+  council  Council            @relation(fields: [councilId], references: [id], onDelete: Cascade)
+  parent   Department?        @relation("DepartmentTree", fields: [parentId], references: [id])
+  children Department[]       @relation("DepartmentTree")
+  manager  User?              @relation("DepartmentManager", fields: [managerId], references: [id], onDelete: SetNull)
   members  DepartmentMember[]
 
-  projects    Project[]
-  tasks       Task[]
+  projects     Project[]
+  tasks        Task[]
   deliverables Deliverable[]
-  costs       Cost[]
-  minuteItems MinuteItem[]
+  costs        Cost[]
+  minuteItems  MinuteItem[]
 
   @@index([councilId])
   @@index([managerId])
@@ -234,21 +258,21 @@ model Meeting {
   status      String   @default("SCHEDULED")
 
   isRecurringInstance Boolean @default(false)
-  createdById         String
+  createdById         String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  council     Council           @relation(fields: [councilId], references: [id], onDelete: Cascade)
-  createdBy   User              @relation("MeetingCreator", fields: [createdById], references: [id])
-  agendaItems AgendaItem[]
-  attendances Attendance[]
-  minutes     Minutes?
-  reminders   MeetingReminder[]
-  deliverables Deliverable[]
+  council       Council           @relation(fields: [councilId], references: [id], onDelete: Cascade)
+  createdBy     User?             @relation("MeetingCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  agendaItems   AgendaItem[]
+  attendances   Attendance[]
+  minutes       Minutes?
+  reminders     MeetingReminder[]
+  deliverables  Deliverable[]
   documentLinks DocumentLink[]
-  tasks       Task[]
-  costs       Cost[]
+  tasks         Task[]
+  costs         Cost[]
 
   @@index([councilId])
   @@index([meetingDate])
@@ -265,7 +289,7 @@ model AgendaItem {
   title     String
   notes     String?
 
-  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  meeting     Meeting      @relation(fields: [meetingId], references: [id], onDelete: Cascade)
   minuteItems MinuteItem[]
 
   @@index([meetingId])
@@ -287,7 +311,7 @@ model Attendance {
   notes        String?
 
   meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
-  user    User?   @relation(fields: [userId], references: [id])
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([meetingId])
   @@index([userId])
@@ -305,7 +329,7 @@ model Minutes {
   status        String    @default("DRAFT")
   summary       String? // ملخص (يدوي أو AI لاحقًا)
   rawDiscussion String? // النص الخام للنقاش — مدخل للذكاء الاصطناعي لاحقًا
-  createdById   String
+  createdById   String?
   submittedAt   DateTime?
   approvedById  String?
   approvedAt    DateTime?
@@ -314,8 +338,8 @@ model Minutes {
   updatedAt     DateTime  @updatedAt
 
   meeting    Meeting          @relation(fields: [meetingId], references: [id], onDelete: Cascade)
-  createdBy  User             @relation("MinutesCreator", fields: [createdById], references: [id])
-  approvedBy User?            @relation("MinutesApprover", fields: [approvedById], references: [id])
+  createdBy  User?            @relation("MinutesCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  approvedBy User?            @relation("MinutesApprover", fields: [approvedById], references: [id], onDelete: SetNull)
   items      MinuteItem[]
   addenda    MinuteAddendum[]
   versions   MinutesVersion[]
@@ -327,14 +351,14 @@ model Minutes {
 model MinutesVersion {
   id          String   @id @default(cuid())
   minutesId   String
-  createdById String
+  createdById String?
   reason      String   @default("AUTO_SAVE")
   summary     String?
   itemsJson   String
   createdAt   DateTime @default(now())
 
-  minutes  Minutes @relation(fields: [minutesId], references: [id], onDelete: Cascade)
-  createdBy User    @relation(fields: [createdById], references: [id])
+  minutes   Minutes @relation(fields: [minutesId], references: [id], onDelete: Cascade)
+  createdBy User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([minutesId, createdAt])
   @@map("minutes_versions")
@@ -346,20 +370,20 @@ model MinutesVersion {
 //  voteResult: APPROVED | REJECTED  (عند type=VOTE)
 // ============================================================
 model MinuteItem {
-  id           String  @id @default(cuid())
-  minutesId    String
-  order        Int     @default(0)
-  type         String  @default("DISCUSSION")
-  title        String?
-  content      String
-  departmentId String?
-  projectId    String?
+  id                 String    @id @default(cuid())
+  minutesId          String
+  order              Int       @default(0)
+  type               String    @default("DISCUSSION")
+  title              String?
+  content            String
+  departmentId       String?
+  projectId          String?
   sourceAgendaItemId String?
-  outcome      String  @default("OPEN")
-  settledAt    DateTime?
-  settlementNote String?
-  carriedFromItemId String?
-  carriedToItemId   String?
+  outcome            String    @default("OPEN")
+  settledAt          DateTime?
+  settlementNote     String?
+  carriedFromItemId  String?
+  carriedToItemId    String?
 
   // للتصويت / الاعتماد
   voteResult   String?
@@ -370,19 +394,19 @@ model MinuteItem {
   aiGenerated Boolean  @default(false)
   createdAt   DateTime @default(now())
 
-  minutes    Minutes     @relation(fields: [minutesId], references: [id], onDelete: Cascade)
-  sourceAgendaItem AgendaItem? @relation(fields: [sourceAgendaItemId], references: [id])
-  department Department?  @relation(fields: [departmentId], references: [id])
-  project    Project?     @relation(fields: [projectId], references: [id])
-  carriedFromItem MinuteItem?  @relation("MinuteItemCarryFrom", fields: [carriedFromItemId], references: [id])
-  carriedForwardItems MinuteItem[] @relation("MinuteItemCarryFrom")
-  carriedToItem MinuteItem? @relation("MinuteItemCarryTo", fields: [carriedToItemId], references: [id])
-  carriedBackItems MinuteItem[] @relation("MinuteItemCarryTo")
-  tasks      Task[]
-  deliverables Deliverable[]
-  followUps  FollowUpEntry[]
-  documentLinks DocumentLink[]
-  costs      Cost[]
+  minutes             Minutes         @relation(fields: [minutesId], references: [id], onDelete: Cascade)
+  sourceAgendaItem    AgendaItem?     @relation(fields: [sourceAgendaItemId], references: [id])
+  department          Department?     @relation(fields: [departmentId], references: [id])
+  project             Project?        @relation(fields: [projectId], references: [id])
+  carriedFromItem     MinuteItem?     @relation("MinuteItemCarryFrom", fields: [carriedFromItemId], references: [id])
+  carriedForwardItems MinuteItem[]    @relation("MinuteItemCarryFrom")
+  carriedToItem       MinuteItem?     @relation("MinuteItemCarryTo", fields: [carriedToItemId], references: [id])
+  carriedBackItems    MinuteItem[]    @relation("MinuteItemCarryTo")
+  tasks               Task[]
+  deliverables        Deliverable[]
+  followUps           FollowUpEntry[]
+  documentLinks       DocumentLink[]
+  costs               Cost[]
 
   @@index([minutesId])
   @@index([sourceAgendaItemId])
@@ -398,11 +422,11 @@ model MinuteAddendum {
   id          String   @id @default(cuid())
   minutesId   String
   content     String
-  createdById String
+  createdById String?
   createdAt   DateTime @default(now())
 
   minutes   Minutes @relation(fields: [minutesId], references: [id], onDelete: Cascade)
-  createdBy User    @relation(fields: [createdById], references: [id])
+  createdBy User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([minutesId])
   @@map("minute_addenda")
@@ -414,31 +438,31 @@ model MinuteAddendum {
 //  status: NEW | IN_PROGRESS | LATE | DONE | CANCELLED
 // ============================================================
 model Task {
-  id             String    @id @default(cuid())
-  organizationId String
-  title          String
-  description    String?
-  councilId      String?
-  departmentId   String?
-  projectId      String?
-  deliverableId  String?
-  assigneeId     String?
+  id                 String    @id @default(cuid())
+  organizationId     String
+  title              String
+  description        String?
+  councilId          String?
+  departmentId       String?
+  projectId          String?
+  deliverableId      String?
+  assigneeId         String?
   sourceMeetingId    String?
   sourceMinuteItemId String?
-  dueDate     DateTime?
-  priority    String    @default("MEDIUM")
-  status      String    @default("NEW")
-  completedAt DateTime?
-  createdById String
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  dueDate            DateTime?
+  priority           String    @default("MEDIUM")
+  status             String    @default("NEW")
+  completedAt        DateTime?
+  createdById        String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   council       Council?     @relation(fields: [councilId], references: [id])
   department    Department?  @relation(fields: [departmentId], references: [id])
   project       Project?     @relation(fields: [projectId], references: [id])
   deliverable   Deliverable? @relation(fields: [deliverableId], references: [id])
-  assignee      User?        @relation("TaskAssignee", fields: [assigneeId], references: [id])
-  createdBy     User         @relation("TaskCreator", fields: [createdById], references: [id])
+  assignee      User?        @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  createdBy     User?        @relation("TaskCreator", fields: [createdById], references: [id], onDelete: SetNull)
   sourceMeeting Meeting?     @relation(fields: [sourceMeetingId], references: [id])
   sourceItem    MinuteItem?  @relation(fields: [sourceMinuteItemId], references: [id])
 
@@ -462,10 +486,10 @@ model Task {
 //  Ù…ÙƒÙ„ÙÙˆ Ø§Ù„ØªÙƒÙ„ÙŠÙ Ø¨Ø´ÙƒÙ„ Ù…ØªØ¹Ø¯Ø¯
 // ============================================================
 model TaskAssignee {
-  id        String   @id @default(cuid())
-  taskId    String
-  userId    String
-  isPrimary Boolean  @default(false)
+  id         String   @id @default(cuid())
+  taskId     String
+  userId     String
+  isPrimary  Boolean  @default(false)
   assignedAt DateTime @default(now())
 
   task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
@@ -481,31 +505,32 @@ model TaskAssignee {
 //  status: NEW | IN_PROGRESS | LATE | DONE | CANCELLED
 // ============================================================
 model Deliverable {
-  id             String   @id @default(cuid())
-  organizationId String
-  title          String
-  description    String?
-  councilId      String?
-  departmentId   String?
-  sourceMeetingId String?
+  id                 String    @id @default(cuid())
+  organizationId     String
+  title              String
+  description        String?
+  councilId          String?
+  departmentId       String?
+  sourceMeetingId    String?
   sourceMinuteItemId String?
-  ownerId        String?
-  dueDate        DateTime?
-  status         String   @default("NEW")
-  completedAt    DateTime?
-  createdById    String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  ownerId            String?
+  dueDate            DateTime?
+  status             String    @default("NEW")
+  completedAt        DateTime?
+  createdById        String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  council      Council?     @relation(fields: [councilId], references: [id])
-  department   Department?  @relation(fields: [departmentId], references: [id])
+  council       Council?    @relation(fields: [councilId], references: [id])
+  department    Department? @relation(fields: [departmentId], references: [id])
   sourceMeeting Meeting?    @relation(fields: [sourceMeetingId], references: [id])
-  sourceItem   MinuteItem?  @relation(fields: [sourceMinuteItemId], references: [id])
-  owner        User?        @relation("DeliverableOwner", fields: [ownerId], references: [id])
+  sourceItem    MinuteItem? @relation(fields: [sourceMinuteItemId], references: [id])
+  owner         User?       @relation("DeliverableOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  createdBy     User?       @relation("DeliverableCreator", fields: [createdById], references: [id], onDelete: SetNull)
 
-  tasks        Task[]
-  followUps    FollowUpEntry[]
-  reminders    Reminder[]
+  tasks         Task[]
+  followUps     FollowUpEntry[]
+  reminders     Reminder[]
   documentLinks DocumentLink[]
 
   @@index([organizationId])
@@ -521,24 +546,24 @@ model Deliverable {
 //  type: NOTE | STATUS | ESCALATION | ATTACHMENT | REMINDER
 // ============================================================
 model FollowUpEntry {
-  id             String   @id @default(cuid())
-  organizationId String
-  taskId         String?
-  deliverableId  String?
-  minuteItemId   String?
-  authorId       String
-  type           String   @default("NOTE")
-  body           String
-  statusFrom     String?
-  statusTo       String?
-  needsEscalation Boolean @default(false)
-  attachmentUrl  String?
-  createdAt      DateTime @default(now())
+  id              String   @id @default(cuid())
+  organizationId  String
+  taskId          String?
+  deliverableId   String?
+  minuteItemId    String?
+  authorId        String?
+  type            String   @default("NOTE")
+  body            String
+  statusFrom      String?
+  statusTo        String?
+  needsEscalation Boolean  @default(false)
+  attachmentUrl   String?
+  createdAt       DateTime @default(now())
 
   task        Task?        @relation(fields: [taskId], references: [id], onDelete: Cascade)
   deliverable Deliverable? @relation(fields: [deliverableId], references: [id], onDelete: Cascade)
   minuteItem  MinuteItem?  @relation(fields: [minuteItemId], references: [id], onDelete: Cascade)
-  author      User         @relation(fields: [authorId], references: [id])
+  author      User?        @relation(fields: [authorId], references: [id], onDelete: SetNull)
 
   @@index([organizationId])
   @@index([taskId])
@@ -553,22 +578,22 @@ model FollowUpEntry {
 //  offsetType: NOW | DAY_BEFORE | HOURS_BEFORE | REPEAT_UNTIL_CLOSED
 // ============================================================
 model Reminder {
-  id             String   @id @default(cuid())
-  organizationId String
-  targetType     String
-  targetId       String
-  taskId         String?
-  deliverableId  String?
-  userId         String
-  offsetType     String   @default("NOW")
-  hoursBefore    Int?
-  scheduledFor   DateTime
-  repeatUntilClosed Boolean @default(false)
-  channel        String   @default("IN_APP")
-  status         String   @default("PENDING")
-  sentAt         DateTime?
-  dedupeKey      String?  @unique
-  createdAt      DateTime @default(now())
+  id                String    @id @default(cuid())
+  organizationId    String
+  targetType        String
+  targetId          String
+  taskId            String?
+  deliverableId     String?
+  userId            String
+  offsetType        String    @default("NOW")
+  hoursBefore       Int?
+  scheduledFor      DateTime
+  repeatUntilClosed Boolean   @default(false)
+  channel           String    @default("IN_APP")
+  status            String    @default("PENDING")
+  sentAt            DateTime?
+  dedupeKey         String?   @unique
+  createdAt         DateTime  @default(now())
 
   task        Task?        @relation(fields: [taskId], references: [id], onDelete: Cascade)
   deliverable Deliverable? @relation(fields: [deliverableId], references: [id], onDelete: Cascade)
@@ -619,14 +644,14 @@ model DocumentLink {
   minuteItemId   String?
   deliverableId  String?
   councilId      String?
-  createdById    String
+  createdById    String?
   createdAt      DateTime @default(now())
 
-  meeting     Meeting?    @relation(fields: [meetingId], references: [id], onDelete: Cascade)
-  minuteItem  MinuteItem? @relation(fields: [minuteItemId], references: [id], onDelete: Cascade)
+  meeting     Meeting?     @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  minuteItem  MinuteItem?  @relation(fields: [minuteItemId], references: [id], onDelete: Cascade)
   deliverable Deliverable? @relation(fields: [deliverableId], references: [id], onDelete: Cascade)
-  council     Council?    @relation(fields: [councilId], references: [id], onDelete: Cascade)
-  createdBy   User        @relation(fields: [createdById], references: [id])
+  council     Council?     @relation(fields: [councilId], references: [id], onDelete: Cascade)
+  createdBy   User?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([organizationId])
   @@index([entityType, entityId])
@@ -641,12 +666,12 @@ model DocumentLink {
 model TaskNote {
   id        String   @id @default(cuid())
   taskId    String
-  authorId  String
+  authorId  String?
   body      String
   createdAt DateTime @default(now())
 
-  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  author User @relation(fields: [authorId], references: [id])
+  task   Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author User? @relation(fields: [authorId], references: [id], onDelete: SetNull)
 
   @@index([taskId])
   @@map("task_notes")
@@ -657,25 +682,25 @@ model TaskNote {
 //  paymentStatus: UNPAID | PARTIAL | PAID
 // ============================================================
 model Cost {
-  id             String  @id @default(cuid())
-  organizationId String
-  description    String
-  expectedAmount Float?
-  actualAmount   Float?
-  currency       String  @default("USD")
-  departmentId   String?
-  projectId      String?
-  responsibleId  String?
-  taskId         String?
-  minuteItemId   String?
+  id              String   @id @default(cuid())
+  organizationId  String
+  description     String
+  expectedAmount  Float?
+  actualAmount    Float?
+  currency        String   @default("USD")
+  departmentId    String?
+  projectId       String?
+  responsibleId   String?
+  taskId          String?
+  minuteItemId    String?
   sourceMeetingId String?
-  paymentStatus  String  @default("UNPAID")
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  paymentStatus   String   @default("UNPAID")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   department    Department? @relation(fields: [departmentId], references: [id])
   project       Project?    @relation(fields: [projectId], references: [id])
-  responsible   User?       @relation("CostResponsible", fields: [responsibleId], references: [id])
+  responsible   User?       @relation("CostResponsible", fields: [responsibleId], references: [id], onDelete: SetNull)
   task          Task?       @relation(fields: [taskId], references: [id])
   minuteItem    MinuteItem? @relation(fields: [minuteItemId], references: [id])
   sourceMeeting Meeting?    @relation(fields: [sourceMeetingId], references: [id])
@@ -702,12 +727,12 @@ model Attachment {
   entityId       String
   taskId         String?
   costId         String?
-  uploadedById   String
+  uploadedById   String?
   createdAt      DateTime @default(now())
 
   task       Task? @relation(fields: [taskId], references: [id], onDelete: Cascade)
   cost       Cost? @relation(fields: [costId], references: [id], onDelete: Cascade)
-  uploadedBy User  @relation(fields: [uploadedById], references: [id])
+  uploadedBy User? @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
 
   @@index([entityType, entityId])
   @@map("attachments")
@@ -770,7 +795,7 @@ model AuditLog {
   details        String   @default("{}") // JSON كنص
   createdAt      DateTime @default(now())
 
-  user User? @relation(fields: [userId], references: [id])
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([organizationId])
   @@index([entityType, entityId])
